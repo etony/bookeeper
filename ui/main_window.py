@@ -1,5 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Bookeeper 主窗口"""
+"""
+Bookeeper 主窗口模块 — MainWindow。
+
+这是整个应用的唯一主窗口，承担以下职责：
+  1. UI 布局：按功能区分为标题栏、文件操作、图书信息表单、搜索筛选、图书列表表格
+  2. 数据模型：通过 BookTableModel (QSortFilterProxyModel) 管理表格数据，支持排序与搜索
+  3. API 交互：调用 DoubanService 获取图书信息（按 ISBN / 关键词搜索）
+  4. 文件操作：CSV 加载、保存、导出、模板导出
+  5. 后台任务：批量刷新、导出、Web 服务均在 QThread 中执行，不阻塞 UI
+  6. 状态持久化：使用 QSettings 保存上次打开的文件路径与暗色/亮色主题偏好
+
+与各 Dialog 的数据交互方式：
+  - DetailDialog  : 传入 isbn_list + index，独立通过 API 获取数据
+  - SearchDialog  : 通过 book_selected 信号回传 Book 对象
+  - DuplicateDialog : 通过 dlg.choice 属性读取用户选择
+  - StatsDialog   : 直接传入 self._model._original (原始 DataFrame)
+"""
 
 import os
 import time
@@ -36,22 +52,25 @@ LOG = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
+  """应用主窗口，聚合所有 UI 组件与业务逻辑。"""
 
   def __init__(self):
     super().__init__()
-    self._api = DoubanService()
-    self._data_mgr = DataManager()
-    self._setup_ui()
-    self._init_model()
-    self._setup_connections()
-    self._setup_auto_backup()
-    self._load_last_file()
+    self._api = DoubanService()      # 豆瓣 API 服务（单例）
+    self._data_mgr = DataManager()   # CSV 文件读写管理
+    self._setup_ui()                  # 1. 构建所有 UI 控件
+    self._init_model()                # 2. 初始化表格数据模型
+    self._setup_connections()         # 3. 绑定信号与槽
+    self._setup_auto_backup()         # 4. 启动自动备份定时器（5 分钟）
+    self._load_last_file()            # 5. 恢复上次会话（文件路径 + 主题）
 
   # ══════════════════════════════════════════════
   #  UI 构建
   # ══════════════════════════════════════════════
 
   def _setup_ui(self):
+    """构建主窗口的完整布局，从上到下依次为：
+       标题栏 → 文件操作组 → 图书信息表单 → 搜索筛选组 → 图书列表表格。"""
     self.setWindowTitle(Config.APP_NAME)
     icon_path = Config.APP_ICON
     self.setWindowIcon(QIcon(icon_path) if os.path.exists(icon_path) else QIcon())
@@ -64,19 +83,19 @@ class MainWindow(QMainWindow):
     layout.setContentsMargins(12, 8, 12, 8)
     layout.setSpacing(8)
 
-    # 顶部标题栏
+    # 顶部标题栏（应用名 + 版本 + 主题切换按钮）
     layout.addWidget(self._make_header())
 
-    # 文件操作组
+    # 文件操作组（加载 / 保存 / 导出 / 模板 / 统计）
     layout.addWidget(self._make_file_group())
 
-    # 图书信息组（核心表单）
+    # 图书信息组（核心表单：ISBN、书名、作者等输入控件）
     layout.addWidget(self._make_book_group())
 
-    # 搜索筛选组
+    # 搜索筛选组（取消 / 重置 / 查询 / 豆瓣搜索 / Web 服务）
     layout.addWidget(self._make_search_group())
 
-    # 图书列表表格
+    # 图书列表表格 — QTableView + 代理模型支持排序
     self._table = QTableView()
     self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -84,6 +103,7 @@ class MainWindow(QMainWindow):
     self._table.setSortingEnabled(True)
     self._table.verticalHeader().setVisible(True)
     hdr = self._table.horizontalHeader()
+    # 设置列缩放策略：第 0 列（ISBN）Stretch，第 1~3 列可手动调整，其余 Stretch
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
     hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
@@ -95,6 +115,8 @@ class MainWindow(QMainWindow):
   # ── 顶部标题栏 ──────────────────────────────
 
   def _make_header(self):
+    """构建顶部标题栏 QFrame，包含应用名、版本号、主题切换按钮。
+    使用 objectName='headerFrame' 方便主题 QSS 单独定制。"""
     bar = QFrame()
     bar.setObjectName('headerFrame')
     row = QHBoxLayout(bar)
@@ -121,6 +143,8 @@ class MainWindow(QMainWindow):
   # ── 文件操作组 ──────────────────────────────
 
   def _make_file_group(self):
+    """构建文件操作 QGroupBox，包含当前文件路径（只读）与五个操作按钮。
+    设计意图：将文件 IO 相关操作集中在此行，保持界面整洁。"""
     g = QGroupBox('📁 文件操作')
     row = QHBoxLayout(g)
     row.setContentsMargins(8, 16, 8, 8)
@@ -144,12 +168,25 @@ class MainWindow(QMainWindow):
   # ── 图书信息组 ──────────────────────────────
 
   def _make_book_group(self):
+    """
+    构建图书信息 QGroupBox，使用 QGridLayout 组织表单。
+    布局为 4 行 6 列（0~5），每三列一组：
+      - 第 0 行：ISBN 输入 + 扫描/获取/更新/批量刷新按钮
+      - 第 1 行：书名 / 作者 / 出版（文本输入）
+      - 第 2 行：价格 / 状态（下拉框）/ 书柜
+      - 第 3 行：评分（只读）/ 购书日期 / 已读日期（QDateEdit）
+
+    QDateEdit 日期处理：
+      - 空值使用 QDate(1900, 1, 1) + setSpecialValueText(' ') 显示空白
+      - 调用 _set_date_val / _get_date_val 读写
+      - isSpecialValue() 判断是否为空（但当前用 1900-01-01 与当前日期比较）
+    """
     g = QGroupBox('📖 图书信息')
     grid = QGridLayout(g)
     grid.setContentsMargins(8, 16, 8, 8)
     grid.setSpacing(6)
 
-    # ISBN 行（占整行宽度）
+    # ISBN 行（占整行宽度 0~5 列）
     grid.addWidget(QLabel('ISBN'), 0, 0)
     self._isbn_input = QLineEdit()
     self._isbn_input.setPlaceholderText('输入 13 位 ISBN 编码')
@@ -185,7 +222,7 @@ class MainWindow(QMainWindow):
     grid.addWidget(QLabel('状态'), 2, 2)
     self._status_combo = QComboBox()
     self._status_combo.addItems(Config.STATUSES)
-    self._status_combo.setCurrentIndex(-1)
+    self._status_combo.setCurrentIndex(-1)  # 初始无选中
     grid.addWidget(self._status_combo, 2, 3)
     grid.addWidget(QLabel('书柜'), 2, 4)
     self._shelf_input = QLineEdit()
@@ -202,8 +239,9 @@ class MainWindow(QMainWindow):
     self._start_date_input = QDateEdit()
     self._start_date_input.setDisplayFormat('yyyy-MM-dd')
     self._start_date_input.setCalendarPopup(True)
+    # SpecialValueText 在值为最小值时显示 ' '，视觉上表示空
     self._start_date_input.setSpecialValueText(' ')
-    self._start_date_input.setDate(QDate(1900, 1, 1))
+    self._start_date_input.setDate(QDate(1900, 1, 1))  # 默认"空"值
     grid.addWidget(self._start_date_input, 3, 3)
     grid.addWidget(QLabel('已读日期'), 3, 4)
     self._end_date_input = QDateEdit()
@@ -217,6 +255,9 @@ class MainWindow(QMainWindow):
   # ── 搜索筛选组 ──────────────────────────────
 
   def _make_search_group(self):
+    """构建搜索筛选 QGroupBox。
+    按钮靠右排列，_btn_cancel（取消操作）只在后台任务运行时可见。
+    设计意图：将搜索/筛选/Web 服务等辅助功能集中一行，不占用主区域空间。"""
     g = QGroupBox('🔍 搜索筛选')
     row = QHBoxLayout(g)
     row.setContentsMargins(8, 16, 8, 8)
@@ -224,7 +265,7 @@ class MainWindow(QMainWindow):
 
     row.addStretch()
     self._btn_cancel = QPushButton('✕ 取消')
-    self._btn_cancel.setVisible(False)
+    self._btn_cancel.setVisible(False)  # 默认隐藏，批量刷新/导出时显示
     self._btn_reset = QPushButton('⟲ 重置')
     self._btn_search = QPushButton('🔎 查询列表')
     self._btn_search_douban = QPushButton('🌐 豆瓣搜索')
@@ -241,6 +282,10 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _init_model(self):
+    """初始化空的 BookTableModel（QSortFilterProxyModel 子类）并绑定到表格。
+    BookTableModel 内部维护 _original（原始 DataFrame）与 _proxy（排序后 DataFrame），
+    通过 mapToSource / mapFromSource 实现排序后行号映射。
+    初始时所有列均为空列表。"""
     df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
@@ -251,25 +296,39 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _setup_connections(self):
+    """绑定所有信号与槽，分以下几类：
+      - 输入事件   : ISBN 回车/校验、主题切换
+      - 按钮点击   : 文件操作、图书扫码/获取/更新、搜索/重置
+      - 表格交互   : 单击（填充表单）/ 双击（打开详情）/ 右键菜单
+      - 后台任务   : 批量刷新、导出、Web 服务（通过 _btn_cancel 取消）
+    """
+    # ISBN 回车即触发获取
     self._isbn_input.returnPressed.connect(self._fetch_book_info)
+    # 文件操作按钮
     self._btn_load.clicked.connect(self._load_csv)
     self._btn_save.clicked.connect(self._save_csv)
     self._btn_export.clicked.connect(self._export_books)
     self._btn_template.clicked.connect(self._export_template)
     self._btn_stats.clicked.connect(self._show_stats)
+    # 图书信息操作按钮
     self._btn_scan.clicked.connect(self._scan_barcode)
     self._btn_fetch.clicked.connect(self._fetch_book_info)
     self._btn_update.clicked.connect(self._update_book)
     self._btn_refresh.clicked.connect(self._refresh_all)
+    # 搜索/重置按钮
     self._btn_reset.clicked.connect(self._reset_form)
     self._btn_search.clicked.connect(self._search_table)
     self._btn_search_douban.clicked.connect(self._open_search_dialog)
+    # Web 服务 / 取消操作
     self._btn_web.clicked.connect(self._toggle_web_server)
     self._btn_cancel.clicked.connect(self._cancel_operation)
+    # 表格交互：单击填充下方表单，双击打开详情，右键弹出删除菜单
     self._table.clicked.connect(self._on_row_clicked)
     self._table.doubleClicked.connect(self._on_row_double_clicked)
     self._table.customContextMenuRequested.connect(self._show_context_menu)
+    # ISBN 输入框失去焦点/回车后校验格式
     self._isbn_input.editingFinished.connect(self._validate_isbn_input)
+    # 主题切换
     self._btn_theme.clicked.connect(self._toggle_theme)
 
   # ══════════════════════════════════════════════
@@ -277,11 +336,14 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _setup_auto_backup(self):
+    """启动自动备份定时器，每 5 分钟（300000ms）备份一次数据到 backups/ 目录。"""
     self._backup_timer = QTimer(self)
     self._backup_timer.timeout.connect(self._do_auto_backup)
     self._backup_timer.start(300000)
 
   def _do_auto_backup(self):
+    """执行自动备份：导出全量数据到 CSV，文件名带时间戳（如 book_backup_20260706_143000.csv）。
+    备份目录位于当前文件所在目录的 backups/ 文件夹下。"""
     if self._model.rowCount() == 0:
       return
     src = self._file_path.text()
@@ -298,11 +360,19 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _load_csv(self):
+    """加载 CSV 文件并与现有数据合并。
+    重复处理流程：
+      1. 计算已存在 ISBN 与导入 ISBN 的交集
+      2. 若有重复 → 弹出 DuplicateDialog 让用户选择 skip / overwrite / merge
+      3. 根据选择过滤/删除/更新数据
+      4. 使用 pd.concat 合并新旧 DataFrame，重新加载到模型
+    注意：所有比较基于第 0 列（ISBN）的字符串值。"""
     path, _ = QFileDialog.getOpenFileName(self, '加载 CSV', '.', 'CSV 文件 (*.csv);;所有文件 (*)')
     if not path:
       return
     try:
       new_df = self._data_mgr.load_csv(path)
+      # 获取已有数据的 ISBN 集合（第 0 列）
       existing = set(self._model._original.iloc[:, 0].astype(str).tolist())
       incoming = set(new_df.iloc[:, 0].astype(str).tolist())
       duplicates = list(existing & incoming)
@@ -310,7 +380,7 @@ class MainWindow(QMainWindow):
       if duplicates:
         dlg = DuplicateDialog(duplicates, self)
         dlg.exec()
-        choice = dlg.choice
+        choice = dlg.choice  # 通过 Dialog 的属性读取选择结果
       if choice == 'skip':
         new_df = new_df[~new_df.iloc[:, 0].astype(str).isin(duplicates)]
       elif choice == 'overwrite':
@@ -329,6 +399,7 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '错误', f'加载失败：{e}')
 
   def _save_csv(self):
+    """将当前数据保存为 CSV 文件。捕获 PermissionError 并给出明确提示。"""
     path, _ = QFileDialog.getSaveFileName(self, '保存 CSV', '.', 'CSV 文件 (*.csv);;所有文件 (*)')
     if not path:
       return
@@ -339,12 +410,14 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '错误', f'文件写入失败：{e}\n请检查文件是否被其他程序占用')
 
   def _export_template(self):
+    """导出一个仅含表头（无数据）的 CSV 模板，供用户填写。"""
     path, _ = QFileDialog.getSaveFileName(self, '导出模板', '模板.csv', 'CSV 文件 (*.csv)')
     if not path:
       return
     self._data_mgr.export_template(path, Config.TABLE_COLUMNS)
 
   def _show_stats(self):
+    """打开统计面板 Dialog，传入原始 DataFrame（未过滤/排序的数据）。"""
     dlg = StatsDialog(self._model._original, self)
     dlg.exec()
 
@@ -353,9 +426,15 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _scan_barcode(self):
+    """
+    从图片中识别 ISBN 条形码。
+    流程：cv.imdecode 读取 → 灰度化 → Otsu 二值化 → pyzbar 解码。
+    使用 np.fromfile 支持中文路径（cv.imread 不支持）。
+    识别成功后自动填入 ISBN 输入框并触发 _fetch_book_info。"""
     path, _ = QFileDialog.getOpenFileName(self, '选择条形码图片', '.', '图片 (*.png *.jpg);;所有文件 (*)')
     if not path:
       return
+    # imdecode + np.fromfile 支持中文路径
     img = cv.imdecode(np.fromfile(path, dtype=np.uint8), cv.IMREAD_COLOR)
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     _, binary = cv.threshold(gray, 0, 255, cv.THRESH_OTSU + cv.THRESH_BINARY)
@@ -369,6 +448,9 @@ class MainWindow(QMainWindow):
   # ── 日期工具 ──────────────────────────────────
 
   def _set_date_val(self, edit: QDateEdit, text: str):
+    """将字符串日期（yyyy-MM-dd）设置到 QDateEdit。
+    约定：空值/无效日期统一设到 QDate(1900, 1, 1)，
+    配合 setSpecialValueText(' ') 显示为空白。"""
     if text and text.strip():
       d = QDate.fromString(text.strip(), 'yyyy-MM-dd')
       if d.isValid():
@@ -377,6 +459,8 @@ class MainWindow(QMainWindow):
     edit.setDate(QDate(1900, 1, 1))
 
   def _get_date_val(self, edit: QDateEdit) -> str:
+    """从 QDateEdit 读取日期字符串。
+    若为 1900-01-01（空值标记）则返回空字符串。"""
     d = edit.date()
     if d.isValid() and d > QDate(1900, 1, 1):
       return d.toString('yyyy-MM-dd')
@@ -387,6 +471,9 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _validate_isbn_input(self):
+    """ISBN 输入框失去焦点/回车时校验格式。
+    校验失败时通过 setStyleSheet 显示红色边框/背景提示。
+    注意：仅校验格式，不调用 API。"""
     raw = self._isbn_input.text().strip()
     isbn = clean_isbn(raw)
     if not isbn:
@@ -394,6 +481,7 @@ class MainWindow(QMainWindow):
       return
     valid = (len(isbn) == 13 and is_valid_isbn13(isbn)) or (len(isbn) == 10 and is_valid_isbn10(isbn))
     if not valid:
+      # 暗色/亮色主题使用不同色系的错误提示
       if self._dark_mode:
         self._isbn_input.setStyleSheet('background-color: #3d1f1f; color: #ffcccc; border: 1px solid #cc4444')
       else:
@@ -402,6 +490,9 @@ class MainWindow(QMainWindow):
       self._isbn_input.setStyleSheet('')
 
   def _fetch_book_info(self):
+    """校验 ISBN 并调用豆瓣 API 获取图书信息。
+    流程：clean_isbn → 校验位验证 → API 调用 → 填充表单 + 插入/更新模型。
+    若 ISBN 无效或网络异常，弹出警告并不做任何修改。"""
     raw = self._isbn_input.text().strip()
     isbn = clean_isbn(raw)
     if not isbn:
@@ -417,10 +508,13 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '错误', f'ISBN 无效或网络异常：{isbn}')
       return
     self._fill_form(book)
+    # 自动将获取到的记录插入/更新到表格
     self._model.update_or_insert(book.to_row())
     self._update_status()
 
   def _fill_form(self, book: Book):
+    """将 Book 对象的数据填充到图书表单各输入控件中。
+    QComboBox 通过状态名称查找索引；QDateEdit 通过 _set_date_val 处理空值。"""
     self._title_input.setText(book.title)
     self._author_input.setText(book.author)
     self._publisher_input.setText(book.publisher)
@@ -437,12 +531,15 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _update_book(self):
+    """读取表单各输入控件值，组装为行数据并更新表格模型。
+    评分/评分人数从 'x / y' 格式拆分；状态/书柜为空时使用 Config 默认值。"""
     row = [
       self._isbn_input.text(),
       self._title_input.text(),
       self._author_input.text(),
       self._publisher_input.text(),
       self._price_input.text(),
+      # 从 '8.5 / 1234' 中拆分评分和人数
       self._rating_display.text().split('/')[0].strip() if '/' in self._rating_display.text() else '0',
       self._rating_display.text().split('/')[-1].strip() if '/' in self._rating_display.text() else '0',
       self._status_combo.currentText() or Config.DEFAULT_STATUS,
@@ -458,6 +555,8 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _cancel_operation(self):
+    """取消当前正在运行的后台任务（批量刷新或导出）。
+    通过 _current_worker.cancel() 设置标志位，worker 在下一个循环检测并退出。"""
     if hasattr(self, '_current_worker') and self._current_worker:
       self._current_worker.cancel()
       self.statusBar().showMessage('操作已取消')
@@ -468,6 +567,14 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _refresh_all(self):
+    """
+    批量刷新所有图书的豆瓣信息，使用 QThread + RefreshWorker。
+    设计要点：
+      - 通过 moveToThread 将 worker 移至子线程，避免 UI 阻塞
+      - worker 处理完一本即通过 progress 信号回传 Book 对象
+      - finished 信号连接清理代码（deleteLater + 恢复按钮状态）
+      - _btn_cancel 可见时用户可随时中断操作
+    注意：QThread 本身不能跨线程直接操作 UI，只能通过信号传递数据。"""
     isbn_list = self._model.get_column_unique(0)
     if not isbn_list:
       return
@@ -494,6 +601,7 @@ class MainWindow(QMainWindow):
     self._refresh_thread.start()
 
   def _on_refresh_progress(self, book: Book):
+    """接收到 RefreshWorker 的 progress 信号后，更新模型和状态栏。"""
     self._model.update_or_insert(book.to_row())
     self._refresh_done += 1
     self.statusBar().showMessage(f'信息更新:{self._refresh_total}/{self._refresh_done}')
@@ -503,6 +611,11 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _export_books(self):
+    """
+    导出所有图书的详细信息到 CSV（含封面链接、豆瓣页等扩展字段）。
+    使用 ExportWorker 在后台获取每本书的详细信息，结果通过 result_ready 信号收集。
+    最终合并到 DataFrame 后写入 CSV。
+    设计意图：与 _refresh_all 相同的 QThread 模式，可被 _cancel_operation 中断。"""
     isbn_list = self._model.get_column_unique(0)
     if not isbn_list:
       QMessageBox.warning(self, '错误', '导出信息为空')
@@ -513,7 +626,7 @@ class MainWindow(QMainWindow):
 
     self._btn_export.setEnabled(False)
     self._btn_cancel.setVisible(True)
-    self._export_results = []
+    self._export_results = []  # 收集所有 ExportWorker 发回的 Book 对象
     self._export_path = path
 
     self._export_thread = QThread()
@@ -527,6 +640,7 @@ class MainWindow(QMainWindow):
     self._export_thread.finished.connect(self._on_export_done)
     self._export_thread.finished.connect(lambda: self._btn_export.setEnabled(True))
     self._export_thread.finished.connect(lambda: self._btn_cancel.setVisible(False))
+    # result_ready 每获取一本书即追加到列表
     self._export_worker.result_ready.connect(self._export_results.append)
     self._export_worker.progress.connect(
       lambda c, t: self.statusBar().showMessage(f'导出中 {c}/{t}'))
@@ -535,6 +649,8 @@ class MainWindow(QMainWindow):
     self._export_thread.start()
 
   def _on_export_done(self):
+    """导出线程结束后，将收集的 Book 列表拼装为 DataFrame 写入 CSV。
+    扩展字段（封面链接、出版日期、豆瓣页等）追加在 TABLE_COLUMNS 之后。"""
     if not self._export_results:
       return
     rows = [b.to_row() + [b.cover_url, b.pubdate, b.douban_url, b.recommend, b.pages]
@@ -550,6 +666,10 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _on_row_clicked(self, index):
+    """单击表格行：将选中行的数据填充到下方的图书表单。
+    index 是代理模型（QSortFilterProxyModel）索引，
+    需要先通过 mapToSource 映射到原始模型行号（由 BookTableModel 内部处理）。
+    使用 index.sibling() 读取同一行不同列的数据。"""
     def val(col):
       v = index.sibling(index.row(), col).data()
       return str(v) if v is not None else ''
@@ -567,16 +687,23 @@ class MainWindow(QMainWindow):
     self._set_date_val(self._end_date_input, val(10))
 
   def _on_row_double_clicked(self, index):
+    """双击表格行：打开 DetailDialog 显示图书详情。
+    从当前行的第 0 列读取 ISBN，在完整 ISBN 列表中查找位置，
+    传递给 DetailDialog 用于翻页。"""
     isbn_clicked = index.sibling(index.row(), 0).data()
     if not isbn_clicked:
       return
     isbn_clicked = str(isbn_clicked)
+    # 从原始模型获取完整的 ISBN 列表（非排序后视图）
     isbn_list = self._model.get_column_unique(0)
     pos = isbn_list.index(isbn_clicked) if isbn_clicked in isbn_list else 0
     dlg = DetailDialog(self, isbn_list, pos)
     dlg.show()
 
   def _show_context_menu(self, pos):
+    """右键表格弹出上下文菜单（目前只有「删除选中」）。
+    选中多行时收集所有不重复的 ISBN（只取第 0 列），
+    用户确认后逐条删除。"""
     if self._model.rowCount() == 0:
       return
     indexes = self._table.selectedIndexes()
@@ -605,11 +732,14 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _search_table(self):
+    """使用图书表单中的书名作为关键词，在当前表格中过滤。
+    BookTableModel.search 在代理模型中设置过滤正则。"""
     keyword = self._title_input.text().strip()
     self._model.search(keyword)
     self._update_status()
 
   def _reset_form(self):
+    """清空图书表单所有输入控件，重置搜索代理模型（显示全部）。"""
     self._title_input.clear()
     self._author_input.clear()
     self._publisher_input.clear()
@@ -617,12 +747,15 @@ class MainWindow(QMainWindow):
     self._rating_display.clear()
     self._shelf_input.clear()
     self._status_combo.setCurrentIndex(-1)
+    # 清空日期：回到空值标记
     self._start_date_input.setDate(QDate(1900, 1, 1))
     self._end_date_input.setDate(QDate(1900, 1, 1))
     self._model.reset_search()
     self._update_status()
 
   def _open_search_dialog(self):
+    """打开豆瓣搜索对话框，若图书表单中有书名（>=2 字符）则预填搜索关键词。
+    通过 book_selected 信号连接 _on_search_result 接收结果。"""
     dlg = SearchDialog(self)
     keyword = self._title_input.text().strip()
     if len(keyword) >= 2:
@@ -631,6 +764,7 @@ class MainWindow(QMainWindow):
     dlg.exec()
 
   def _on_search_result(self, book: Book):
+    """接收 SearchDialog 的 book_selected 信号，填充表单并更新表格。"""
     self._fill_form(book)
     self._model.update_or_insert(book.to_row())
     self._update_status()
@@ -641,10 +775,15 @@ class MainWindow(QMainWindow):
 
   @staticmethod
   def _settings():
+    """返回 QSettings 实例，配置文件位于项目根目录下的 settings.ini。
+    使用 IniFormat 便于手动编辑。"""
     return QSettings(os.path.join(os.path.dirname(__file__), '..', 'settings.ini'),
                      QSettings.Format.IniFormat)
 
   def _load_last_file(self):
+    """启动时从 QSettings 恢复上次会话：
+      - 若之前保存了文件路径且文件存在 → 自动加载
+      - 恢复暗色/亮色主题偏好"""
     s = self._settings()
     path = s.value('lastFile', '')
     self._dark_mode = s.value('darkMode', 'true') == 'true'
@@ -661,6 +800,7 @@ class MainWindow(QMainWindow):
     self._update_status()
 
   def _toggle_theme(self):
+    """切换暗色/亮色主题，更新按钮图标并保存偏好到 QSettings。"""
     self._dark_mode = not self._dark_mode
     qss = DARK_QSS if self._dark_mode else LIGHT_QSS
     self.window().setStyleSheet(qss)
@@ -669,10 +809,15 @@ class MainWindow(QMainWindow):
     s.setValue('darkMode', self._dark_mode)
 
   def _save_last_file(self, path: str):
+    """将最近打开的文件路径写入 QSettings。"""
     s = self._settings()
     s.setValue('lastFile', path)
 
   def _toggle_web_server(self):
+    """启动/停止内嵌 Web 服务（FastAPI + uvicorn）。
+    启动条件：必须先加载数据文件。
+    使用 QThread + _WebWorker 运行 Web 服务器，不阻塞主线程。
+    按钮文字根据服务状态切换。"""
     if self._btn_web.text() == '🛑 停止服务':
       if hasattr(self, '_web_worker') and self._web_worker:
         self._web_worker.stop()
@@ -697,11 +842,17 @@ class MainWindow(QMainWindow):
     webbrowser.open(url)
 
   def _update_status(self):
+    """更新底部状态栏，显示当前记录总数。"""
     self.statusBar().showMessage(
       f'共 {self._model.rowCount()} 条记录  {Config.APP_VERSION}')
 
 
 class _WebWorker(QObject):
+  """在子线程中运行内嵌 Web 服务器的 Worker。
+  通过 QThread + moveToThread 实现非阻塞运行。
+  run() 创建 BookWebServer 实例并启动，start() 会阻塞当前线程。
+  stop() 从主线程调用以终止服务器。"""
+
   def __init__(self, file_path, port):
     super().__init__()
     self.file_path = file_path
@@ -709,10 +860,12 @@ class _WebWorker(QObject):
     self.server = None
 
   def run(self):
+    """启动 Web 服务器（阻塞调用，运行在子线程中）。"""
     from services.web_server import BookWebServer
     self.server = BookWebServer(self.file_path, self.port)
     self.server.start()
 
   def stop(self):
+    """请求停止 Web 服务器。"""
     if self.server:
       self.server.stop()

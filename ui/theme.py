@@ -1,5 +1,13 @@
-"""全局暗色/亮色主题 QSS"""
+"""
+主题样式模块 - 提供暗色/亮色两套 Qt 样式表（QSS）。
 
+设计要点：
+  - 使用 DARK_QSS 与 LIGHT_QSS 两个字符串常量定义全局样式。
+  - 在 MainWindow 中通过 setStyleSheet 切换。
+  - 选色遵循低对比度、护眼原则，适合长时间使用。
+"""
+
+# 暗色主题样式表（默认），覆盖所有标准控件的外观
 DARK_QSS = '''
 QWidget {
   background-color: #1b1e23;
@@ -72,6 +80,7 @@ QMessageBox QLabel { color: #c8ccd4; }
 QMessageBox QPushButton { min-width: 70px; }
 '''
 
+# 亮色主题样式表，通过 _toggle_theme 切换
 LIGHT_QSS = '''
 QWidget { background-color: #f5f5f5; color: #333; font-size: 13px; }
 QLineEdit, QComboBox, QTextBrowser {
