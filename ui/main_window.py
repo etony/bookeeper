@@ -639,8 +639,13 @@ class MainWindow(QMainWindow):
   #  辅助
   # ══════════════════════════════════════════════
 
+  @staticmethod
+  def _settings():
+    return QSettings(os.path.join(os.path.dirname(__file__), '..', 'settings.ini'),
+                     QSettings.Format.IniFormat)
+
   def _load_last_file(self):
-    s = QSettings('BookManager', 'BookManager')
+    s = self._settings()
     path = s.value('lastFile', '')
     self._dark_mode = s.value('darkMode', 'true') == 'true'
     if not self._dark_mode:
@@ -660,11 +665,11 @@ class MainWindow(QMainWindow):
     qss = DARK_QSS if self._dark_mode else LIGHT_QSS
     self.window().setStyleSheet(qss)
     self._btn_theme.setText('☀️' if self._dark_mode else '🌙')
-    s = QSettings('BookManager', 'BookManager')
+    s = self._settings()
     s.setValue('darkMode', self._dark_mode)
 
   def _save_last_file(self, path: str):
-    s = QSettings('BookManager', 'BookManager')
+    s = self._settings()
     s.setValue('lastFile', path)
 
   def _toggle_web_server(self):
