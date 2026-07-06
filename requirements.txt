@@ -1,0 +1,9 @@
+PyQt6>=6.5
+pandas>=2.0
+opencv-python>=4.8
+pyzbar>=0.1.9
+requests>=2.31
+numpy>=1.24
+matplotlib>=3.8
+fastapi>=0.110
+uvicorn>=0.29
