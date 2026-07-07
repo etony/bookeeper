@@ -24,7 +24,7 @@ class Book:
   price: str = ''         # 价格（去掉 "CNY"、"元" 等前缀后缀后的纯数字字符串）
   rating: str = '0'       # 豆瓣评分（如 "8.5"），字符串类型，便于 UI 显示
   raters: str = '0'       # 评价人数（如 "1234"），用于计算推荐度
-  status: str = '未读'     # 阅读状态：未读 / 在读 / 已读
+  status: str = '默认'     # 阅读状态：默认 / 计划 / 已读
   shelf: str = '未设置'    # 所在书柜/书架分类
   start_date: str = ''    # 开始阅读日期
   end_date: str = ''      # 读完日期

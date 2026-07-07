@@ -28,6 +28,8 @@ def clean_isbn(text: str) -> str:
     - 统一处理用户输入的各种 ISBN 格式（带连字符、空格、前缀等）
     - 避免在各处重复编写正则清洗逻辑
   """
+  if not text:
+    return ''
   return re.sub(r'[^0-9Xx]', '', text.strip())
 
 

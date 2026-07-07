@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 import pyzbar.pyzbar as pyzbar
 from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate
-from PyQt6.QtGui import QIcon, QAction, QFont
+from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QTableView, QDateEdit,
@@ -69,8 +69,6 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _setup_ui(self):
-    """构建主窗口的完整布局，从上到下依次为：
-       标题栏 → 文件操作组 → 图书信息表单 → 搜索筛选组 → 图书列表表格。"""
     self.setWindowTitle(Config.APP_NAME)
     icon_path = Config.APP_ICON
     self.setWindowIcon(QIcon(icon_path) if os.path.exists(icon_path) else QIcon())
@@ -80,37 +78,39 @@ class MainWindow(QMainWindow):
     central = QWidget()
     self.setCentralWidget(central)
     layout = QVBoxLayout(central)
-    layout.setContentsMargins(12, 8, 12, 8)
-    layout.setSpacing(8)
+    layout.setContentsMargins(14, 10, 14, 10)
+    layout.setSpacing(10)
 
-    # 顶部标题栏（应用名 + 版本 + 主题切换按钮）
     layout.addWidget(self._make_header())
-
-    # 文件操作组（加载 / 保存 / 导出 / 模板 / 统计）
     layout.addWidget(self._make_file_group())
-
-    # 图书信息组（核心表单：ISBN、书名、作者等输入控件）
     layout.addWidget(self._make_book_group())
-
-    # 搜索筛选组（取消 / 重置 / 查询 / 豆瓣搜索 / Web 服务）
     layout.addWidget(self._make_search_group())
 
-    # 图书列表表格 — QTableView + 代理模型支持排序
     self._table = QTableView()
     self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     self._table.setAlternatingRowColors(True)
     self._table.setSortingEnabled(True)
-    self._table.verticalHeader().setVisible(True)
+    self._table.verticalHeader().setVisible(False)
+    self._table.verticalHeader().setDefaultSectionSize(30)
     hdr = self._table.horizontalHeader()
-    # 设置列缩放策略：第 0 列（ISBN）Stretch，第 1~3 列可手动调整，其余 Stretch
+    hdr.setSectionsMovable(True)
+    hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+    hdr.customContextMenuRequested.connect(self._show_header_menu)
+    hdr.sectionMoved.connect(self._save_column_state)
+    hdr.sectionResized.connect(self._save_column_state)
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
     hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
     hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     layout.addWidget(self._table, stretch=1)
 
-    self.setStatusBar(QStatusBar(self))
+    sb = QStatusBar(self)
+    sb.setFont(QFont('', 11))
+    sb.showMessage('欢迎使用 Bookeeper')
+    self.setStatusBar(sb)
+
+    self._setup_shortcuts()
 
   # ── 顶部标题栏 ──────────────────────────────
 
@@ -137,30 +137,34 @@ class MainWindow(QMainWindow):
     self._btn_theme = QPushButton('☀️')
     self._btn_theme.setFixedWidth(36)
     self._btn_theme.setToolTip('切换亮色/暗色主题')
+    self._btn_theme.setStyleSheet('font-size: 16px;')
     row.addWidget(self._btn_theme)
     return bar
 
   # ── 文件操作组 ──────────────────────────────
 
   def _make_file_group(self):
-    """构建文件操作 QGroupBox，包含当前文件路径（只读）与五个操作按钮。
-    设计意图：将文件 IO 相关操作集中在此行，保持界面整洁。"""
     g = QGroupBox('📁 文件操作')
     row = QHBoxLayout(g)
-    row.setContentsMargins(8, 16, 8, 8)
+    row.setContentsMargins(8, 18, 8, 8)
     row.setSpacing(6)
 
     row.addWidget(QLabel('目录'))
     self._file_path = QLineEdit()
     self._file_path.setReadOnly(True)
-    self._file_path.setPlaceholderText('未加载文件')
+    self._file_path.setPlaceholderText('点击「加载」按钮或 Ctrl+O 打开 CSV 文件')
     row.addWidget(self._file_path, stretch=1)
 
     self._btn_load = QPushButton('📂 加载')
+    self._btn_load.setToolTip('从 CSV 文件加载图书数据 (Ctrl+O)')
     self._btn_save = QPushButton('💾 保存')
+    self._btn_save.setToolTip('将当前数据保存到 CSV 文件 (Ctrl+S)')
     self._btn_export = QPushButton('📤 导出')
+    self._btn_export.setToolTip('导出扩展字段（封面、页码等）到 CSV')
     self._btn_template = QPushButton('📋 模板')
+    self._btn_template.setToolTip('导出一个空模板供填写')
     self._btn_stats = QPushButton('📊 统计')
+    self._btn_stats.setToolTip('查看阅读状态、出版社、评分分布统计')
     for btn in (self._btn_load, self._btn_save, self._btn_export, self._btn_template, self._btn_stats):
       row.addWidget(btn)
     return g
@@ -168,42 +172,33 @@ class MainWindow(QMainWindow):
   # ── 图书信息组 ──────────────────────────────
 
   def _make_book_group(self):
-    """
-    构建图书信息 QGroupBox，使用 QGridLayout 组织表单。
-    布局为 4 行 6 列（0~5），每三列一组：
-      - 第 0 行：ISBN 输入 + 扫描/获取/更新/批量刷新按钮
-      - 第 1 行：书名 / 作者 / 出版（文本输入）
-      - 第 2 行：价格 / 状态（下拉框）/ 书柜
-      - 第 3 行：评分（只读）/ 购书日期 / 已读日期（QDateEdit）
-
-    QDateEdit 日期处理：
-      - 空值使用 QDate(1900, 1, 1) + setSpecialValueText(' ') 显示空白
-      - 调用 _set_date_val / _get_date_val 读写
-      - isSpecialValue() 判断是否为空（但当前用 1900-01-01 与当前日期比较）
-    """
     g = QGroupBox('📖 图书信息')
     grid = QGridLayout(g)
-    grid.setContentsMargins(8, 16, 8, 8)
+    grid.setContentsMargins(8, 18, 8, 8)
     grid.setSpacing(6)
 
-    # ISBN 行（占整行宽度 0~5 列）
     grid.addWidget(QLabel('ISBN'), 0, 0)
     self._isbn_input = QLineEdit()
-    self._isbn_input.setPlaceholderText('输入 13 位 ISBN 编码')
+    self._isbn_input.setPlaceholderText('输入 ISBN（回车即查询）')
+    self._isbn_input.setToolTip('输入 13 位或 10 位 ISBN，回车自动从豆瓣获取信息')
     grid.addWidget(self._isbn_input, 0, 1)
     self._btn_scan = QPushButton('📷 识别')
+    self._btn_scan.setToolTip('从图片中扫描条形码识别 ISBN')
     self._btn_fetch = QPushButton('🌐 获取信息')
+    self._btn_fetch.setToolTip('从豆瓣获取当前 ISBN 的图书信息')
     self._btn_update = QPushButton('💾 更新记录')
+    self._btn_update.setToolTip('将表单内容保存到当前表格')
     self._btn_refresh = QPushButton('🔄 批量刷新')
+    self._btn_refresh.setToolTip('遍历所有图书，从豆瓣更新评分等信息')
     grid.addWidget(self._btn_scan, 0, 2)
     grid.addWidget(self._btn_fetch, 0, 3)
     grid.addWidget(self._btn_update, 0, 4)
     grid.addWidget(self._btn_refresh, 0, 5)
 
-    # 第一行：书名 / 作者 / 出版
     grid.addWidget(QLabel('书名'), 1, 0)
     self._title_input = QLineEdit()
-    self._title_input.setPlaceholderText('图书名称')
+    self._title_input.setPlaceholderText('图书名称（用作搜索关键词）')
+    self._title_input.setToolTip('输入书名，点击「查询列表」可按此过滤表格')
     grid.addWidget(self._title_input, 1, 1)
     grid.addWidget(QLabel('作者'), 1, 2)
     self._author_input = QLineEdit()
@@ -214,7 +209,6 @@ class MainWindow(QMainWindow):
     self._publisher_input.setPlaceholderText('出版社')
     grid.addWidget(self._publisher_input, 1, 5)
 
-    # 第二行：价格 / 状态 / 书柜
     grid.addWidget(QLabel('价格'), 2, 0)
     self._price_input = QLineEdit()
     self._price_input.setPlaceholderText('定价')
@@ -222,26 +216,27 @@ class MainWindow(QMainWindow):
     grid.addWidget(QLabel('状态'), 2, 2)
     self._status_combo = QComboBox()
     self._status_combo.addItems(Config.STATUSES)
-    self._status_combo.setCurrentIndex(-1)  # 初始无选中
+    self._status_combo.setCurrentIndex(-1)
+    self._status_combo.setToolTip('阅读状态：默认 / 计划 / 已读')
     grid.addWidget(self._status_combo, 2, 3)
     grid.addWidget(QLabel('书柜'), 2, 4)
     self._shelf_input = QLineEdit()
     self._shelf_input.setPlaceholderText('存放位置')
     grid.addWidget(self._shelf_input, 2, 5)
 
-    # 第三行：评分 / 购书日期 / 已读日期
     grid.addWidget(QLabel('评分'), 3, 0)
     self._rating_display = QLineEdit()
     self._rating_display.setReadOnly(True)
     self._rating_display.setPlaceholderText('豆瓣评分 / 人数')
+    self._rating_display.setToolTip('豆瓣评分，由获取信息自动填充')
     grid.addWidget(self._rating_display, 3, 1)
     grid.addWidget(QLabel('购书日期'), 3, 2)
     self._start_date_input = QDateEdit()
     self._start_date_input.setDisplayFormat('yyyy-MM-dd')
     self._start_date_input.setCalendarPopup(True)
-    # SpecialValueText 在值为最小值时显示 ' '，视觉上表示空
     self._start_date_input.setSpecialValueText(' ')
-    self._start_date_input.setDate(QDate(1900, 1, 1))  # 默认"空"值
+    self._start_date_input.setDate(QDate(1900, 1, 1))
+    self._start_date_input.setToolTip('购书日期，留空表示未记录')
     grid.addWidget(self._start_date_input, 3, 3)
     grid.addWidget(QLabel('已读日期'), 3, 4)
     self._end_date_input = QDateEdit()
@@ -249,31 +244,40 @@ class MainWindow(QMainWindow):
     self._end_date_input.setCalendarPopup(True)
     self._end_date_input.setSpecialValueText(' ')
     self._end_date_input.setDate(QDate(1900, 1, 1))
+    self._end_date_input.setToolTip('读完日期，状态设为"已读"时自动填入')
     grid.addWidget(self._end_date_input, 3, 5)
     return g
 
   # ── 搜索筛选组 ──────────────────────────────
 
   def _make_search_group(self):
-    """构建搜索筛选 QGroupBox。
-    按钮靠右排列，_btn_cancel（取消操作）只在后台任务运行时可见。
-    设计意图：将搜索/筛选/Web 服务等辅助功能集中一行，不占用主区域空间。"""
     g = QGroupBox('🔍 搜索筛选')
     row = QHBoxLayout(g)
-    row.setContentsMargins(8, 16, 8, 8)
+    row.setContentsMargins(8, 18, 8, 8)
     row.setSpacing(6)
 
+    row.addWidget(QLabel('按书名过滤'))
+    self._search_input = QLineEdit()
+    self._search_input.setPlaceholderText('输入关键词，回车即搜索')
+    self._search_input.setToolTip('输入关键词后回车，按书名过滤表格 (Ctrl+F)')
+    self._search_input.returnPressed.connect(self._search_table)
+    row.addWidget(self._search_input)
     row.addStretch()
     self._btn_cancel = QPushButton('✕ 取消')
-    self._btn_cancel.setVisible(False)  # 默认隐藏，批量刷新/导出时显示
+    self._btn_cancel.setVisible(False)
+    self._btn_cancel.setToolTip('取消正在进行的后台操作 (Esc)')
     self._btn_reset = QPushButton('⟲ 重置')
-    self._btn_search = QPushButton('🔎 查询列表')
+    self._btn_reset.setToolTip('清空表单并重置列表显示 (Ctrl+R)')
+    self._btn_search = QPushButton('🔎 查询')
+    self._btn_search.setToolTip('按书名过滤表格 (Ctrl+F)')
     self._btn_search_douban = QPushButton('🌐 豆瓣搜索')
+    self._btn_search_douban.setToolTip('从豆瓣搜索图书并添加到列表 (Ctrl+D)')
     row.addWidget(self._btn_cancel)
     row.addWidget(self._btn_reset)
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_search_douban)
     self._btn_web = QPushButton('🌐 Web 服务')
+    self._btn_web.setToolTip('启动/停止内嵌 Web 服务（手机/浏览器可访问）')
     row.addWidget(self._btn_web)
     return g
 
@@ -294,6 +298,15 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
   #  信号绑定
   # ══════════════════════════════════════════════
+
+  def _setup_shortcuts(self):
+    QShortcut(QKeySequence('Ctrl+O'), self, self._load_csv)
+    QShortcut(QKeySequence('Ctrl+S'), self, self._save_csv)
+    QShortcut(QKeySequence('Ctrl+F'), self, self._search_table)
+    QShortcut(QKeySequence('Ctrl+D'), self, self._open_search_dialog)
+    QShortcut(QKeySequence('Ctrl+R'), self, self._reset_form)
+    QShortcut(QKeySequence('Escape'), self, lambda: (
+      self._cancel_operation() if self._btn_cancel.isVisible() else None))
 
   def _setup_connections(self):
     """绑定所有信号与槽，分以下几类：
@@ -328,6 +341,8 @@ class MainWindow(QMainWindow):
     self._table.customContextMenuRequested.connect(self._show_context_menu)
     # ISBN 输入框失去焦点/回车后校验格式
     self._isbn_input.editingFinished.connect(self._validate_isbn_input)
+    # 状态变更时，若设为"已读"则自动填入当前日期
+    self._status_combo.currentTextChanged.connect(self._on_status_changed)
     # 主题切换
     self._btn_theme.clicked.connect(self._toggle_theme)
 
@@ -354,6 +369,14 @@ class MainWindow(QMainWindow):
     path = os.path.join(backup_dir, f'book_backup_{ts}.csv')
     self._model.export_all().to_csv(path, index=False, encoding='utf-8-sig')
     LOG.info('自动备份成功：%s', path)
+    self._clean_old_backups(backup_dir, keep=30)
+
+  @staticmethod
+  def _clean_old_backups(backup_dir: str, keep: int = 30):
+    files = sorted([f for f in os.listdir(backup_dir) if f.startswith('book_backup_') and f.endswith('.csv')])
+    for f in files[:-keep]:
+      os.remove(os.path.join(backup_dir, f))
+      LOG.info('删除旧备份：%s', f)
 
   # ══════════════════════════════════════════════
   #  文件操作
@@ -732,14 +755,16 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _search_table(self):
-    """使用图书表单中的书名作为关键词，在当前表格中过滤。
-    BookTableModel.search 在代理模型中设置过滤正则。"""
-    keyword = self._title_input.text().strip()
+    keyword = self._search_input.text().strip()
     self._model.search(keyword)
     self._update_status()
 
+  def _on_status_changed(self, text: str):
+    if text == '已读' and self._end_date_input.date() <= QDate(1900, 1, 1):
+      self._end_date_input.setDate(QDate.currentDate())
+
   def _reset_form(self):
-    """清空图书表单所有输入控件，重置搜索代理模型（显示全部）。"""
+    self._search_input.clear()
     self._title_input.clear()
     self._author_input.clear()
     self._publisher_input.clear()
@@ -747,15 +772,12 @@ class MainWindow(QMainWindow):
     self._rating_display.clear()
     self._shelf_input.clear()
     self._status_combo.setCurrentIndex(-1)
-    # 清空日期：回到空值标记
     self._start_date_input.setDate(QDate(1900, 1, 1))
     self._end_date_input.setDate(QDate(1900, 1, 1))
     self._model.reset_search()
     self._update_status()
 
   def _open_search_dialog(self):
-    """打开豆瓣搜索对话框，若图书表单中有书名（>=2 字符）则预填搜索关键词。
-    通过 book_selected 信号连接 _on_search_result 接收结果。"""
     dlg = SearchDialog(self)
     keyword = self._title_input.text().strip()
     if len(keyword) >= 2:
@@ -797,6 +819,7 @@ class MainWindow(QMainWindow):
         self._file_path.setText(path)
       except Exception:
         pass
+    self._restore_column_state()
     self._update_status()
 
   def _toggle_theme(self):
@@ -841,10 +864,62 @@ class MainWindow(QMainWindow):
     self._btn_web.setText('🛑 停止服务')
     webbrowser.open(url)
 
+  # ══════════════════════════════════════════════
+  #  列隐藏/重排
+  # ══════════════════════════════════════════════
+
+  def _show_header_menu(self, pos):
+    hdr = self._table.horizontalHeader()
+    menu = QMenu(self)
+    for col in range(hdr.count()):
+      name = self._model.headerData(col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
+      action = menu.addAction(name)
+      action.setCheckable(True)
+      action.setChecked(not hdr.isSectionHidden(col))
+      action.setData(col)
+      action.triggered.connect(lambda _, c=col: self._toggle_column(c))
+    menu.exec(hdr.mapToGlobal(pos))
+
+  def _toggle_column(self, col):
+    hdr = self._table.horizontalHeader()
+    hdr.setSectionHidden(col, not hdr.isSectionHidden(col))
+    self._save_column_state()
+
+  def _save_column_state(self):
+    s = self._settings()
+    s.beginGroup('ColumnState')
+    hdr = self._table.horizontalHeader()
+    for col in range(hdr.count()):
+      key = f'col_{col}'
+      s.setValue(f'{key}/hidden', hdr.isSectionHidden(col))
+      s.setValue(f'{key}/visualIndex', hdr.visualIndex(col))
+      s.setValue(f'{key}/width', hdr.sectionSize(col))
+    s.endGroup()
+
+  def _restore_column_state(self):
+    s = self._settings()
+    s.beginGroup('ColumnState')
+    hdr = self._table.horizontalHeader()
+    for col in range(hdr.count()):
+      key = f'col_{col}'
+      hidden = s.value(f'{key}/hidden', 'false') == 'true'
+      vi = int(s.value(f'{key}/visualIndex', str(col)))
+      w = int(s.value(f'{key}/width', '0'))
+      if hidden:
+        hdr.setSectionHidden(col, True)
+      if w > 0:
+        hdr.resizeSection(col, w)
+      hdr.moveSection(hdr.visualIndex(col), vi)
+    s.endGroup()
+    self._table.update()
+
   def _update_status(self):
-    """更新底部状态栏，显示当前记录总数。"""
-    self.statusBar().showMessage(
-      f'共 {self._model.rowCount()} 条记录  {Config.APP_VERSION}')
+    total = self._model._original.shape[0]
+    visible = self._model.rowCount()
+    txt = f'共 {total} 条记录'
+    if visible != total and total > 0:
+      txt = f'已筛选 {visible}/{total} 条记录'
+    self.statusBar().showMessage(f'{txt}  |  {Config.APP_NAME} v{Config.APP_VERSION}')
 
 
 class _WebWorker(QObject):

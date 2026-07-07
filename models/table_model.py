@@ -42,6 +42,7 @@ class BookTableModel(QAbstractTableModel):
     )
     # _data: UI 显示的数据快照，search() 和 sort() 只操作此副本
     self._data = self._original.copy()
+    self._search_keyword = ''  # 当前搜索关键词，空串表示未搜索
 
   # ── 必需实现（QAbstractTableModel 抽象方法） ──
 
@@ -77,17 +78,15 @@ class BookTableModel(QAbstractTableModel):
 
   # ── 数据操作（双表同步） ──────────────────────
 
-  def append_row(self, row_data: dict):
-    """在末尾新增一行
-
-    _original 和 _data 同时追加，保持双表行数一致。
-    注意：搜索状态下追加的行不会出现在 _data 中（除非重置搜索），
-    因为 search() 会完全替换 _data 为筛选结果。
-    """
-    self.beginResetModel()
-    self._original.loc[self._original.shape[0]] = row_data
-    self._data.loc[self._data.shape[0]] = row_data
-    self.endResetModel()
+  def _rebuild_data(self):
+    if self._search_keyword:
+      mask = pd.Series(False, index=self._original.index)
+      for col in self._original.columns:
+        mask |= self._original[col].astype(str).str.contains(self._search_keyword, na=False)
+      self._data = self._original[mask].copy()
+    else:
+      self._data = self._original.copy()
+    self._data.reset_index(drop=True, inplace=True)
 
   def _find_in_df(self, df: pd.DataFrame, isbn: str):
     """在 DataFrame 中按 ISBN 查找行
@@ -123,7 +122,7 @@ class BookTableModel(QAbstractTableModel):
     else:
       new_row = pd.DataFrame([row[:len(cols)]], columns=cols)
       self._original = pd.concat([self._original, new_row], ignore_index=True)
-      self._data = pd.concat([self._data, new_row], ignore_index=True)
+      self._rebuild_data()
     self.endResetModel()
 
   def delete_by_isbn_batch(self, isbn_list: list):
@@ -160,26 +159,21 @@ class BookTableModel(QAbstractTableModel):
       - 搜索的是 _original 而非 _data，避免多次搜索后范围不断缩小
       - 用 .copy() 创建新 DataFrame，避免后续操作意外修改 _original
       - reset_index(drop=True) 重置行号，保证删除行后行号连续
-      - '分类' 列在默认列中不存在，但有代码逻辑会动态添加此列
+      - 动态遍历所有列而非硬编码列名，新增字段自动纳入搜索
     """
+    self._search_keyword = keyword
     self.beginResetModel()
     df = self._original
-    self._data = df[
-      df['ISBN'].astype(str).str.contains(keyword, na=False)
-      | df['书名'].astype(str).str.contains(keyword, na=False)
-      | df['作者'].astype(str).str.contains(keyword, na=False)
-      | df['出版'].astype(str).str.contains(keyword, na=False)
-      | df['分类'].astype(str).str.contains(keyword, na=False)
-    ].copy()
+    mask = pd.Series(False, index=df.index)
+    for col in df.columns:
+      mask |= df[col].astype(str).str.contains(keyword, na=False)
+    self._data = df[mask].copy()
     self._data.reset_index(drop=True, inplace=True)
     self.endResetModel()
 
   def reset_search(self):
-    """重置搜索，恢复显示全部数据
-
-    直接复制 _original 到 _data，简洁高效。
-    这也是双表设计的核心收益：无需重新读取文件或外部数据源。
-    """
+    """重置搜索，恢复显示全部数据"""
+    self._search_keyword = ''
     self.beginResetModel()
     self._data = self._original.copy()
     self.endResetModel()

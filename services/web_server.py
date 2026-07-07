@@ -305,8 +305,8 @@ for(const[k,v]of Object.entries(m)){const el=document.getElementById(v);if(el&&d
       ('价格', 'price', '定价', 'text', b.get('价格', '')),
       ('评分', 'rating', '豆瓣评分', 'text', b.get('评分', '')),
       ('人数', 'raters', '评价人数', 'text', b.get('人数', '')),
-      ('状态', 'status', '', 'select', b.get('状态', '未读'),
-       '<option>未读</option><option>在读</option><option>已读</option>'),
+       ('状态', 'status', '', 'select', b.get('状态', '默认'),
+       '<option>默认</option><option>计划</option><option>已读</option>'),
       ('书柜', 'shelf', '存放位置', 'text', b.get('书柜', '')),
       ('购书日期', 'start_date', 'YYYY-MM-DD', 'date', b.get('购书日期', '')),
       ('已读日期', 'end_date', 'YYYY-MM-DD', 'date', b.get('已读日期', '')),
@@ -518,15 +518,15 @@ for(const[k,v]of Object.entries(m)){const el=document.getElementById(v);if(el&&d
         'title': book.title, 'author': book.author,
         'publisher': book.publisher, 'price': book.price,
         'rating': book.rating, 'raters': book.raters,
-        'status': '未读',
+        'status': '默认',
       }
 
     # ── 添加图书表单提交 ──
     @app.post('/add', response_class=HTMLResponse)
     def add_submit(isbn: str = Form(''), title: str = Form(''), author: str = Form(''), publisher: str = Form(''),
                    price: str = Form(''), rating: str = Form(''), raters: str = Form(''),
-                   status: str = Form('未读'), shelf: str = Form(''),
-                   start_date: str = Form(''), end_date: str = Form('')):
+                    status: str = Form('默认'), shelf: str = Form(''),
+                    start_date: str = Form(''), end_date: str = Form('')):
       """POST /add — 提交添加图书表单
 
         将表单字段按 DataFrame 列顺序组装为新行，追加到数据中。
@@ -556,14 +556,14 @@ for(const[k,v]of Object.entries(m)){const el=document.getElementById(v);if(el&&d
         if not mask.any():
           return html_page('未找到', '<div class="msg msg-err">图书不存在</div>')
         book = self._data[mask].iloc[0].fillna('').to_dict()
-      return self._form_page(f'编辑 - {book.get("书名","")}', f'/edit/{isbn}', book)
+      return self._form_page(f'编辑 - {book.get("书名","")}', f'/edit/{isbn}', book, show_fetch=True)
 
     # ── 编辑图书表单提交 ──
     @app.post('/edit/{isbn}', response_class=HTMLResponse)
     def edit_submit(isbn: str, title: str = Form(''), author: str = Form(''), publisher: str = Form(''),
                     price: str = Form(''), rating: str = Form(''), raters: str = Form(''),
-                    status: str = Form('未读'), shelf: str = Form(''),
-                    start_date: str = Form(''), end_date: str = Form('')):
+                     status: str = Form('默认'), shelf: str = Form(''),
+                     start_date: str = Form(''), end_date: str = Form('')):
       """POST /edit/{isbn} — 提交编辑图书表单
 
         根据表单字段更新 DataFrame 中对应行的值，

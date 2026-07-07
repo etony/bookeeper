@@ -65,7 +65,7 @@ class Config:
 
   # ── 应用基本信息 ──
   APP_NAME = 'Bookeeper'           # 应用名称
-  APP_VERSION = '2.0.0'            # 当前版本号
+  APP_VERSION = '2.0.1'            # 当前版本号
   APP_ICON = 'book2.png'           # 窗口图标文件名（位于资源目录）
 
   # ── 豆瓣 API 配置 ──
@@ -86,8 +86,8 @@ class Config:
 
   # ── 表格与业务枚举 ──
   TABLE_COLUMNS = ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
-  STATUSES = ['未读', '在读', '已读']     # 阅读状态枚举，对应表格中"状态"列的可选值
-  DEFAULT_STATUS = '未读'                 # 新增图书时的默认阅读状态
+  STATUSES = ['默认', '计划', '已读']     # 阅读状态枚举，对应表格中"状态"列的可选值
+  DEFAULT_STATUS = '默认'                 # 新增图书时的默认阅读状态
   CATEGORIES = ['默认分类', '计划', '已读']  # 分类枚举，目前未展开使用
   DEFAULT_CATEGORY = '计划'               # 新增图书时的默认分类
   DEFAULT_SHELF = '未设置'                # 新增图书时的默认书柜

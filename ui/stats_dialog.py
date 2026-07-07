@@ -6,11 +6,10 @@
   2. 出版社 TOP10 水平条形图
   3. 评分区间柱状图
 使用 matplotlib 的 FigureCanvasQTAgg 嵌入 Qt 界面。
-必须在使用前设置 matplotlib.use('QtAgg')，否则在无头环境会崩溃。
 """
 
 import matplotlib
-matplotlib.use('QtAgg')  # 指定 QtAgg 后端，使 matplotlib 嵌入 PyQt6
+matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'WenQuanYi Micro Hei', 'Noto Sans CJK SC']
 plt.rcParams['axes.unicode_minus'] = False
@@ -19,88 +18,91 @@ from matplotlib.figure import Figure
 import pandas as pd
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTabWidget
 
+DARK_BG = '#161920'
+DARK_FG = '#c8ccd4'
+ACCENT = '#4a8cff'
+
 
 class StatsDialog(QDialog):
-  """统计面板对话框，内部以 QTabWidget 容纳多个 matplotlib 图表。"""
 
   def __init__(self, data: pd.DataFrame, parent=None):
-    """
-    参数:
-      data: 主窗口表格的原始 pandas DataFrame（self._model._original）
-      parent: 父窗口
-    """
     super().__init__(parent)
     self.setWindowTitle('📊 统计面板')
-    self.resize(600, 480)
+    self.resize(680, 500)
     self._data = data
     layout = QVBoxLayout(self)
-    # 三个图表以 QTabWidget 标签页切换，每个标签页是一个 FigureCanvasQTAgg
+    layout.setContentsMargins(8, 8, 8, 8)
     tabs = QTabWidget()
     tabs.addTab(self._make_status_chart(), '阅读状态')
     tabs.addTab(self._make_publisher_chart(), '出版社分布')
     tabs.addTab(self._make_rating_chart(), '评分分布')
     layout.addWidget(tabs)
 
+  def _style_ax(self, ax):
+    ax.set_facecolor('#1a1e2a')
+    ax.tick_params(colors=DARK_FG, labelsize=10)
+    ax.spines['bottom'].set_color('#2a3142')
+    ax.spines['left'].set_color('#2a3142')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
   def _make_status_chart(self) -> FigureCanvasQTAgg:
-    """
-    构建「阅读状态分布」饼图。
-    从 DataFrame 的 '状态' 列统计频次，用 matplotlib pie 绘制。
-    FigureCanvasQTAgg 将 matplotlib Figure 封装为 Qt 控件。
-    """
-    fig = Figure(figsize=(6, 4))          # 新建 Figure，尺寸英寸
-    ax = fig.add_subplot(111)              # 添加单个子图（1行1列第1个）
+    fig = Figure(figsize=(7, 4.5), facecolor=DARK_BG)
+    ax = fig.add_subplot(111)
+    self._style_ax(ax)
+    ax.set_title('图书阅读状态分布', color=DARK_FG, fontsize=13, pad=12)
     counts = self._data.get('状态', pd.Series(dtype=object)).value_counts()
     if not counts.empty:
-      ax.pie(counts.values, labels=counts.index.tolist(), autopct='%1.1f%%')
-      ax.set_title('图书阅读状态分布')
+      colors = ['#4a8cff', '#52c41a', '#faad14', '#ff4d4f', '#b37feb', '#13c2c2']
+      wedges, texts, autotexts = ax.pie(
+        counts.values, labels=counts.index.tolist(), autopct='%1.1f%%',
+        colors=colors[:len(counts)], startangle=90,
+        textprops={'color': DARK_FG, 'fontsize': 11},
+        pctdistance=0.75, labeldistance=1.1)
+      for t in autotexts:
+        t.set_color('#fff')
+        t.set_fontweight('bold')
     else:
-      # 无数据时在图表中央显示占位文字
-      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center')
+      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', color=DARK_FG, fontsize=14)
     fig.tight_layout()
     return FigureCanvasQTAgg(fig)
 
   def _make_publisher_chart(self) -> FigureCanvasQTAgg:
-    """
-    构建「出版社 TOP10」水平条形图。
-    取 '出版' 列频次前 10，倒序排列（顶部显示最多的出版社）。
-    """
-    fig = Figure(figsize=(6, 4))
+    fig = Figure(figsize=(7, 4.5), facecolor=DARK_BG)
     ax = fig.add_subplot(111)
+    self._style_ax(ax)
+    ax.set_title('出版社 TOP10', color=DARK_FG, fontsize=13, pad=12)
     counts = self._data.get('出版', pd.Series(dtype=object)).value_counts().head(10)
     if not counts.empty:
-      # [::-1] 倒序，使最多的出版社在图表上方
-      bars = ax.barh(counts.index.tolist()[::-1], counts.values[::-1])
-      # 在每个条形右侧标注数量
+      bars = ax.barh(counts.index.tolist()[::-1], counts.values[::-1],
+                     color=ACCENT, height=0.65, alpha=0.85)
       for bar, v in zip(bars, counts.values[::-1]):
-        ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height() / 2, str(v),
-                ha='left', va='center', fontsize=10)
-      ax.set_title('出版社 TOP10')
+        ax.text(bar.get_width() + 0.15, bar.get_y() + bar.get_height() / 2, str(v),
+                ha='left', va='center', fontsize=10, color=DARK_FG)
     else:
-      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center')
+      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', color=DARK_FG, fontsize=14)
     fig.tight_layout()
     return FigureCanvasQTAgg(fig)
 
   def _make_rating_chart(self) -> FigureCanvasQTAgg:
-    """
-    构建「评分分布」柱状图。
-    将 '评分' 列转为数值后按 [0-6, 6-7, 7-8, 8-9, 9-10] 分箱统计。
-    pd.cut 做区间划分，reindex 保证缺失的箱显示为 0。
-    """
-    fig = Figure(figsize=(6, 4))
+    fig = Figure(figsize=(7, 4.5), facecolor=DARK_BG)
     ax = fig.add_subplot(111)
+    self._style_ax(ax)
+    ax.set_title('评分分布', color=DARK_FG, fontsize=13, pad=12)
     ratings = pd.to_numeric(self._data.get('评分', pd.Series(dtype=object)), errors='coerce').dropna()
     if not ratings.empty:
       bins = [0, 6, 7, 8, 9, 10]
       labels = ['0-6', '6-7', '7-8', '8-9', '9-10']
       cats = pd.cut(ratings, bins=bins, labels=labels)
       counts = cats.value_counts().reindex(labels, fill_value=0)
-      bars = ax.bar(counts.index.tolist(), counts.values)
-      # 柱顶标注数量
+      bar_colors = ['#8a8a8a', '#b3b3b3', '#4a8cff', '#52c41a', '#faad14']
+      bars = ax.bar(counts.index.tolist(), counts.values, color=bar_colors, width=0.55, alpha=0.85)
       for bar, v in zip(bars, counts.values):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1, str(v),
-                ha='center', va='bottom', fontsize=10)
-      ax.set_title('评分分布')
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.15, str(v),
+                ha='center', va='bottom', fontsize=11, color=DARK_FG, fontweight='bold')
+      ax.set_xlabel('评分区间', color=DARK_FG, fontsize=11)
+      ax.set_ylabel('图书数量', color=DARK_FG, fontsize=11)
     else:
-      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center')
+      ax.text(0.5, 0.5, '暂无数据', ha='center', va='center', color=DARK_FG, fontsize=14)
     fig.tight_layout()
     return FigureCanvasQTAgg(fig)

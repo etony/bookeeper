@@ -35,31 +35,38 @@ class DetailDialog(QDialog):
     self._load_current()
 
   def _build_ui(self):
-    """构建布局：左侧 200x280 封面，右侧 QTextBrowser 显示详细信息 + 翻页按钮"""
-    self.setWindowTitle('图书信息')
+    self.setWindowTitle('图书详情')
     self.resize(*Config.DETAIL_DIALOG_SIZE)
     layout = QHBoxLayout(self)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(16)
 
-    # 左侧封面图片
     self._cover = QLabel()
     self._cover.setFixedSize(200, 280)
-    self._cover.setScaledContents(True)  # 图片自适应缩放
+    self._cover.setScaledContents(True)
+    self._cover.setStyleSheet(
+      'border: 1px solid #3a3f4b; border-radius: 4px; background-color: #1e2230;')
     layout.addWidget(self._cover)
 
-    # 右侧信息区域
     right = QVBoxLayout()
+    right.setSpacing(10)
     self._info = QTextBrowser()
-    self._info.setOpenExternalLinks(True)  # HTML 链接可点击跳转
+    self._info.setOpenExternalLinks(True)
+    self._info.setMinimumWidth(300)
     right.addWidget(self._info)
 
-    # 底部翻页按钮
     nav = QHBoxLayout()
-    self._prev_btn = QPushButton('<< 上一本')
-    self._next_btn = QPushButton('下一本 >>')
+    nav.setSpacing(8)
+    self._prev_btn = QPushButton('◀ 上一本')
+    self._prev_btn.setToolTip('查看上一本（快捷键：键盘左方向键）')
+    self._next_btn = QPushButton('下一本 ▶')
+    self._next_btn.setToolTip('查看下一本（快捷键：键盘右方向键）')
     self._prev_btn.clicked.connect(self._prev)
     self._next_btn.clicked.connect(self._next)
+    nav.addStretch()
     nav.addWidget(self._prev_btn)
     nav.addWidget(self._next_btn)
+    nav.addStretch()
     right.addLayout(nav)
     layout.addLayout(right)
 
@@ -86,17 +93,19 @@ class DetailDialog(QDialog):
         img = QImage.fromData(data)
         self._cover.setPixmap(QPixmap.fromImage(img))
 
-    # 使用 HTML 渲染详细信息，豆瓣链接可点击
-    info = f'''<b><font size="5">{book.title}</font></b><br><br>
-<b>作者:</b> {book.author}<br>
-<b>出版:</b> {book.publisher}<br>
-<b>价格:</b> {book.price}<br>
-<b>日期:</b> {book.pubdate}<br>
-<b>ISBN:</b> {book.isbn}<br>
-<b>评分:</b> {book.rating} 分 / {book.raters} 人<br>
-<b>推荐:</b> {book.recommend}<br>
-<b>链接:</b> <a style="color:#5b9aff;" href="{book.douban_url}">豆瓣详情</a>'''
-    self._info.setHtml(info)
+    info_html = f'''<div style="padding: 8px;">
+<div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{book.title}</div>
+<table style="line-height: 1.8;">
+<tr><td style="color:#8899aa; padding-right:16px;">作者</td><td>{book.author}</td></tr>
+<tr><td style="color:#8899aa;">出版</td><td>{book.publisher}</td></tr>
+<tr><td style="color:#8899aa;">价格</td><td>{book.price}</td></tr>
+<tr><td style="color:#8899aa;">日期</td><td>{book.pubdate}</td></tr>
+<tr><td style="color:#8899aa;">ISBN</td><td>{book.isbn}</td></tr>
+<tr><td style="color:#8899aa;">评分</td><td>{book.rating} 分 / {book.raters} 人</td></tr>
+<tr><td style="color:#8899aa;">推荐</td><td>{book.recommend}</td></tr>
+<tr><td style="color:#8899aa;">链接</td><td><a style="color:#4a8cff; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
+</table></div>'''
+    self._info.setHtml(info_html)
 
   def _prev(self):
     """翻到上一本，索引循环"""

@@ -30,26 +30,33 @@ class SearchDialog(QDialog):
     self._build_ui()
 
   def _build_ui(self):
-    """构建布局：搜索输入框 + 按钮 + 结果表格，不允许编辑单元格"""
     self.setWindowTitle('豆瓣图书搜索')
     self.resize(*Config.SEARCH_DIALOG_SIZE)
     layout = QVBoxLayout(self)
+    layout.setContentsMargins(12, 12, 12, 12)
+    layout.setSpacing(8)
 
-    # 顶部搜索栏
     top = QHBoxLayout()
+    top.setSpacing(6)
     self._input = QLineEdit()
-    self._input.setPlaceholderText('输入书名关键词...')
-    self._input.returnPressed.connect(self._search)  # 回车即搜索
-    top.addWidget(self._input)
-    btn = QPushButton('搜索')
+    self._input.setPlaceholderText('输入书名关键词，回车搜索...')
+    self._input.setToolTip('输入书名关键词，回车即从豆瓣搜索')
+    self._input.returnPressed.connect(self._search)
+    top.addWidget(self._input, stretch=1)
+    btn = QPushButton('🔎 搜索')
+    btn.setToolTip('从豆瓣搜索图书')
+    btn.setFixedWidth(100)
     btn.clicked.connect(self._search)
     top.addWidget(btn)
     layout.addLayout(top)
 
-    # 搜索结果表格，不允许编辑、选中整行
     self._table = QTableView()
     self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+    self._table.setAlternatingRowColors(True)
+    self._table.setSortingEnabled(True)
+    self._table.verticalHeader().setVisible(False)
+    self._table.setToolTip('双击行将图书添加到列表')
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     hdr.setStretchLastSection(True)
