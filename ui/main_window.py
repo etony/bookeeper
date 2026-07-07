@@ -97,8 +97,6 @@ class MainWindow(QMainWindow):
     hdr.setSectionsMovable(True)
     hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     hdr.customContextMenuRequested.connect(self._show_header_menu)
-    hdr.sectionMoved.connect(self._save_column_state)
-    hdr.sectionResized.connect(self._save_column_state)
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
     hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
@@ -262,6 +260,12 @@ class MainWindow(QMainWindow):
     self._search_input.setToolTip('输入关键词后回车，按书名过滤表格 (Ctrl+F)')
     self._search_input.returnPressed.connect(self._search_table)
     row.addWidget(self._search_input)
+    row.addWidget(QLabel('状态'))
+    self._search_status = QComboBox()
+    self._search_status.addItems(['全部'] + Config.STATUSES)
+    self._search_status.setCurrentIndex(0)
+    self._search_status.setToolTip('按阅读状态筛选')
+    row.addWidget(self._search_status)
     row.addStretch()
     self._btn_cancel = QPushButton('✕ 取消')
     self._btn_cancel.setVisible(False)
@@ -755,8 +759,10 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _search_table(self):
+    """关键词 + 状态组合筛选，更新表格显示"""
     keyword = self._search_input.text().strip()
-    self._model.search(keyword)
+    status = self._search_status.currentText()
+    self._model.apply_filters(keyword, status if status != '全部' else '')
     self._update_status()
 
   def _on_status_changed(self, text: str):
@@ -765,6 +771,7 @@ class MainWindow(QMainWindow):
 
   def _reset_form(self):
     self._search_input.clear()
+    self._search_status.setCurrentIndex(0)
     self._title_input.clear()
     self._author_input.clear()
     self._publisher_input.clear()
@@ -886,32 +893,36 @@ class MainWindow(QMainWindow):
     self._save_column_state()
 
   def _save_column_state(self):
-    s = self._settings()
-    s.beginGroup('ColumnState')
     hdr = self._table.horizontalHeader()
-    for col in range(hdr.count()):
-      key = f'col_{col}'
-      s.setValue(f'{key}/hidden', hdr.isSectionHidden(col))
-      s.setValue(f'{key}/visualIndex', hdr.visualIndex(col))
-      s.setValue(f'{key}/width', hdr.sectionSize(col))
-    s.endGroup()
+    state_bytes = hdr.saveState().data()
+    import base64
+    state_b64 = base64.b64encode(state_bytes).decode('ascii')
+    s = self._settings()
+    s.setValue('headerState', state_b64)
 
   def _restore_column_state(self):
-    s = self._settings()
-    s.beginGroup('ColumnState')
     hdr = self._table.horizontalHeader()
-    for col in range(hdr.count()):
-      key = f'col_{col}'
-      hidden = s.value(f'{key}/hidden', 'false') == 'true'
-      vi = int(s.value(f'{key}/visualIndex', str(col)))
-      w = int(s.value(f'{key}/width', '0'))
-      if hidden:
-        hdr.setSectionHidden(col, True)
-      if w > 0:
-        hdr.resizeSection(col, w)
-      hdr.moveSection(hdr.visualIndex(col), vi)
-    s.endGroup()
-    self._table.update()
+    s = self._settings()
+    state_b64 = s.value('headerState', '')
+    if state_b64:
+      from PyQt6.QtCore import QByteArray
+      try:
+        import base64
+        state_bytes = base64.b64decode(state_b64)
+        hdr.restoreState(QByteArray(state_bytes))
+      except Exception:
+        pass
+    # 恢复完成后连接信号，避免初始化时 signal 覆盖已保存状态
+    try:
+      hdr.sectionMoved.disconnect()
+    except TypeError:
+      pass
+    try:
+      hdr.sectionResized.disconnect()
+    except TypeError:
+      pass
+    hdr.sectionMoved.connect(self._save_column_state)
+    hdr.sectionResized.connect(self._save_column_state)
 
   def _update_status(self):
     total = self._model._original.shape[0]

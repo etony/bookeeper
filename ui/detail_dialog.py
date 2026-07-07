@@ -77,8 +77,9 @@ class DetailDialog(QDialog):
       return
     self._prev_btn.setEnabled(len(self._isbn_list) > 1)
     self._next_btn.setEnabled(len(self._isbn_list) > 1)
-    # 取模保证索引安全
+    # 取模保证索引安全（循环翻页时不会越界）
     isbn = self._isbn_list[self._index % len(self._isbn_list)]
+    # 缓存查询：避免重复网络请求，同一 ISBN 只调一次豆瓣 API
     if isbn not in self._cache:
       self._cache[isbn] = self._api.get_book_by_isbn(isbn)
     book = self._cache[isbn]
@@ -87,12 +88,14 @@ class DetailDialog(QDialog):
     self.setWindowTitle(f'图书信息 - {book.title}')
 
     # 下载并显示封面
+    # cover_url 是豆瓣返回的小尺寸封面 URL，通过 download_image 获取二进制数据
     if book.cover_url:
       data = self._api.download_image(book.cover_url)
       if data:
         img = QImage.fromData(data)
         self._cover.setPixmap(QPixmap.fromImage(img))
 
+    # 图书详情以 HTML 表格形式展示，QTextBrowser 可安全渲染简单 HTML
     info_html = f'''<div style="padding: 8px;">
 <div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{book.title}</div>
 <table style="line-height: 1.8;">
