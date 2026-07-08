@@ -97,10 +97,6 @@ class MainWindow(QMainWindow):
     hdr.setSectionsMovable(True)
     hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     hdr.customContextMenuRequested.connect(self._show_header_menu)
-    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     layout.addWidget(self._table, stretch=1)
 
     sb = QStatusBar(self)
@@ -297,6 +293,13 @@ class MainWindow(QMainWindow):
     df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
+
+    hdr = self._table.horizontalHeader()
+    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+
     self._update_status()
 
   # ══════════════════════════════════════════════
