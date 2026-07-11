@@ -1,0 +1,7 @@
+books.db
+config.json
+settings.ini
+backups/
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
-"""Bookeeper - 服务层包
+from database import BookRepo as _BookRepo
 
-提供应用的核心业务服务：
-  - douban_api.py：豆瓣 API 封装
-  - data_manager.py：CSV 数据文件管理
-"""
+# 全局共享的 BookRepo 单例，避免各模块重复创建
+_repo = None
 
-from .douban_api import DoubanService
-from .data_manager import DataManager
 
-__all__ = ['DoubanService', 'DataManager']
+def get_repo() -> _BookRepo:
+  """获取全局唯一的 BookRepo 实例"""
+  global _repo
+  if _repo is None:
+    _repo = _BookRepo()
+  return _repo

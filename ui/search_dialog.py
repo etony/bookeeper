@@ -1,32 +1,41 @@
-# -*- coding: utf-8 -*-
-"""
-豆瓣图书搜索对话框模块 — SearchDialog。
-
-功能：输入书名关键词，调用豆瓣 API 搜索，结果以表格展示。
-      用户双击某行后通过 book_selected 信号将 Book 对象传回主窗口。
-      这是 Dialog 与 MainWindow 之间「信号回传数据」的典型模式。
-"""
-
-from PyQt6.QtCore import pyqtSignal, QModelIndex
+from PyQt6.QtCore import pyqtSignal, QModelIndex, QThread, QObject
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import (
   QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-  QTableView, QMessageBox, QHeaderView,
+  QTableView, QMessageBox, QHeaderView, QLabel,
 )
 
 from config import Config
-from services.douban_api import DoubanService
+from services.douban import DoubanService
+
+
+class _SearchWorker(QObject):
+  """后台搜索工作线程，避免 UI 冻结"""
+  finished = pyqtSignal(object)
+  error = pyqtSignal(str)
+
+  def __init__(self, keyword: str):
+    super().__init__()
+    self._keyword = keyword
+
+  def run(self):
+    try:
+      api = DoubanService()
+      books = api.search_books(self._keyword)
+      self.finished.emit(books)
+    except Exception as e:
+      self.error.emit(str(e))
 
 
 class SearchDialog(QDialog):
-  """搜索豆瓣图书，双击选中后通过信号回传"""
-
-  book_selected = pyqtSignal(object)  # 传出 Book 对象，由 MainWindow._on_search_result 接收
+  """豆瓣图书搜索对话框，后台搜索 + 双击选书"""
+  book_selected = pyqtSignal(object)
 
   def __init__(self, parent=None):
     super().__init__(parent)
-    self._api = DoubanService()
-    self._books = []  # 保存搜索结果列表，供双击时按索引取出
+    self._books = []
+    self._thread = None
+    self._worker = None
     self._build_ui()
 
   def _build_ui(self):
@@ -40,14 +49,15 @@ class SearchDialog(QDialog):
     top.setSpacing(6)
     self._input = QLineEdit()
     self._input.setPlaceholderText('输入书名关键词，回车搜索...')
-    self._input.setToolTip('输入书名关键词，回车即从豆瓣搜索')
     self._input.returnPressed.connect(self._search)
     top.addWidget(self._input, stretch=1)
-    btn = QPushButton('🔎 搜索')
-    btn.setToolTip('从豆瓣搜索图书')
-    btn.setFixedWidth(100)
-    btn.clicked.connect(self._search)
-    top.addWidget(btn)
+    self._search_btn = QPushButton('🔎 搜索')
+    self._search_btn.setFixedWidth(100)
+    self._search_btn.clicked.connect(self._search)
+    top.addWidget(self._search_btn)
+    self._loading = QLabel('')
+    self._loading.setStyleSheet('color: #e8922a; font-size: 13px;')
+    top.addWidget(self._loading)
     layout.addLayout(top)
 
     self._table = QTableView()
@@ -56,7 +66,6 @@ class SearchDialog(QDialog):
     self._table.setAlternatingRowColors(True)
     self._table.setSortingEnabled(True)
     self._table.verticalHeader().setVisible(False)
-    self._table.setToolTip('双击行将图书添加到列表')
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     hdr.setStretchLastSection(True)
@@ -67,29 +76,50 @@ class SearchDialog(QDialog):
     layout.addWidget(self._table)
 
   def set_keyword(self, keyword: str):
-    """供 MainWindow 调用，预填搜索关键词（取自图书表单的书名输入框）"""
     self._input.setText(keyword)
 
   def _search(self):
-    """调用豆瓣 API 搜索，结果填充到 QStandardItemModel 表格"""
+    """在后台线程中执行豆瓣搜索"""
     keyword = self._input.text().strip()
     if not keyword:
       QMessageBox.warning(self, '提示', '请输入搜索关键词')
       return
-    self._books = self._api.search_books(keyword)
-    if not self._books:
-      QMessageBox.information(self, '搜索结果', '未找到匹配的图书，请尝试其他关键词')
-    # 创建 9 列模型，与 Book.to_row() 的列顺序一致
-    model = QStandardItemModel(len(self._books), 9)
-    model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '分类', '书柜'])
-    for r, book in enumerate(self._books):
+    self._set_loading(True)
+    self._thread = QThread()
+    self._worker = _SearchWorker(keyword)
+    self._worker.moveToThread(self._thread)
+    self._thread.started.connect(self._worker.run)
+    self._worker.finished.connect(self._on_results)
+    self._worker.error.connect(self._on_error)
+    self._worker.finished.connect(self._thread.quit)
+    self._worker.finished.connect(self._worker.deleteLater)
+    self._thread.finished.connect(self._thread.deleteLater)
+    self._thread.start()
+
+  def _on_results(self, books):
+    self._set_loading(False)
+    self._books = books
+    if not books:
+      QMessageBox.information(self, '搜索结果', '未找到匹配的图书')
+    model = QStandardItemModel(len(books), 9)
+    model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])
+    for r, book in enumerate(books):
       for c, val in enumerate(book.to_row()):
         model.setItem(r, c, QStandardItem(str(val)))
     self._table.setModel(model)
 
+  def _on_error(self, msg):
+    self._set_loading(False)
+    QMessageBox.warning(self, '错误', f'搜索失败: {msg}')
+
+  def _set_loading(self, loading: bool):
+    """切换加载状态：显示/隐藏"正在搜索..."文字"""
+    self._loading.setText('正在搜索...' if loading else '')
+    self._search_btn.setEnabled(not loading)
+    self._input.setEnabled(not loading)
+
   def _on_double_click(self, index: QModelIndex):
-    """双击行 -> 发送 book_selected 信号 -> 关闭对话框。
-    注意：根据 _books 列表索引取 Book 对象，而不是从表格 model 读取。"""
+    """双击选中结果，通过信号传回主窗口"""
     if 0 <= index.row() < len(self._books):
       self.book_selected.emit(self._books[index.row()])
       self.close()
