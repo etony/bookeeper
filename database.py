@@ -1,12 +1,9 @@
 import sqlite3
-import logging
 from typing import List, Optional, Dict
 from contextlib import contextmanager
 
 from config import Config
 from models.book import Book
-
-LOG = logging.getLogger(__name__)
 
 # 数据库建表 DDL
 _SCHEMA = '''
@@ -27,7 +24,6 @@ CREATE TABLE IF NOT EXISTS books (
   douban_url TEXT DEFAULT '',
   recommend TEXT DEFAULT '0',
   pages TEXT DEFAULT '',
-  notes TEXT DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
@@ -79,7 +75,7 @@ class BookRepo:
   def upsert(self, book: Book) -> bool:
     """插入或更新（UPSERT）：存在则更新，不存在则新增"""
     data = {k: v for k, v in book.to_dict().items()
-            if k in Book.__dataclass_fields__ and k != 'rating_detail'}
+            if k != 'rating_detail'}
     cols = ', '.join(data.keys())
     placeholders = ', '.join('?' for _ in data)
     updates = ', '.join(f'{k}=excluded.{k}' for k in data)
@@ -97,44 +93,37 @@ class BookRepo:
       cur = conn.execute('DELETE FROM books WHERE isbn = ?', (isbn,))
       return cur.rowcount > 0
 
-  def delete_batch(self, isbns: List[str]) -> int:
-    """批量删除多条记录"""
-    if not isbns:
-      return 0
-    placeholders = ', '.join('?' for _ in isbns)
-    with self._conn() as conn:
-      cur = conn.execute(f'DELETE FROM books WHERE isbn IN ({placeholders})', isbns)
-      return cur.rowcount
-
   # ── 搜索与筛选 ──
 
-  def search(self, keyword: str = '', status: str = '') -> List[Book]:
-    """按关键词（标题/作者/出版社/ISBN）和状态搜索"""
-    sql = 'SELECT * FROM books WHERE 1=1'
+  @staticmethod
+  def _build_filter(keyword: str = '', status: str = ''):
+    """构造 WHERE 条件子句和参数列表（抽取公共逻辑）"""
+    clauses = []
     params = []
     if keyword:
-      sql += ' AND (title LIKE ? OR author LIKE ? OR publisher LIKE ? OR isbn LIKE ?)'
+      clauses.append('(title LIKE ? OR author LIKE ? OR publisher LIKE ? OR isbn LIKE ?)')
       kw = f'%{keyword}%'
       params.extend([kw, kw, kw, kw])
     if status:
-      sql += ' AND status = ?'
+      clauses.append('status = ?')
       params.append(status)
-    sql += ' ORDER BY title'
+    where = ' AND '.join(clauses)
+    if where:
+      where = 'WHERE ' + where
+    return where, params
+
+  def search(self, keyword: str = '', status: str = '') -> List[Book]:
+    """按关键词（标题/作者/出版社/ISBN）和状态搜索"""
+    where, params = self._build_filter(keyword, status)
+    sql = f'SELECT * FROM books {where} ORDER BY title'
     with self._conn() as conn:
       rows = conn.execute(sql, params).fetchall()
       return [Book.from_dict(dict(r)) for r in rows]
 
   def count(self, keyword: str = '', status: str = '') -> int:
     """符合条件的记录总数（用于状态栏显示）"""
-    sql = 'SELECT COUNT(*) FROM books WHERE 1=1'
-    params = []
-    if keyword:
-      sql += ' AND (title LIKE ? OR author LIKE ? OR publisher LIKE ? OR isbn LIKE ?)'
-      kw = f'%{keyword}%'
-      params.extend([kw, kw, kw, kw])
-    if status:
-      sql += ' AND status = ?'
-      params.append(status)
+    where, params = self._build_filter(keyword, status)
+    sql = f'SELECT COUNT(*) FROM books {where}'
     with self._conn() as conn:
       return conn.execute(sql, params).fetchone()[0]
 

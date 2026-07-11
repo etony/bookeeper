@@ -16,7 +16,7 @@ _RETRY_DELAY = 1.0
 
 def _request_with_retry(method, url, session=None, **kwargs):
   """HTTP 请求包装：失败时自动重试（指数退避），最多 _MAX_RETRIES 次"""
-  requestor = session.request if session else requests.request
+  requestor = session.request
   for attempt in range(_MAX_RETRIES):
     try:
       resp = requestor(method, url, timeout=10, **kwargs)

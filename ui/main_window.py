@@ -1,6 +1,6 @@
 import os
+import base64
 import webbrowser
-import logging
 
 import pandas as pd
 from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, pyqtSignal
@@ -18,9 +18,6 @@ from services.douban import DoubanService
 from services.backup import BackupService
 
 from ui.theme import DARK_QSS, LIGHT_QSS
-
-LOG = logging.getLogger(__name__)
-
 
 class MainWindow(QMainWindow):
   """主窗口，作为中央协调者连接 UI、数据库、API、Web 服务等所有模块"""
@@ -44,8 +41,7 @@ class MainWindow(QMainWindow):
 
   def _setup_ui(self):
     self.setWindowTitle(Config.APP_NAME)
-    icon_path = Config.APP_ICON
-    self.setWindowIcon(QIcon(icon_path) if os.path.exists(icon_path) else QIcon())
+    self.setWindowIcon(QIcon())
     self.resize(*Config.MAIN_WINDOW_SIZE)
     self.setMinimumSize(800, 500)
 
@@ -204,30 +200,24 @@ class MainWindow(QMainWindow):
 
   def _init_table(self):
     """初始化表格模型"""
-    import pandas as pd
     from models.table_model import BookTableModel
-    cols = Config.TABLE_COLUMNS if hasattr(Config, 'TABLE_COLUMNS') else \
-      ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
-    df = pd.DataFrame({c: [] for c in cols}, dtype=object)
+    df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
+    hdr = self._table.horizontalHeader()
+    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     self._load_data()
 
   def _load_data(self):
     """从数据库重新加载全量数据到表格"""
     books = self._repo.get_all()
     rows = [b.to_row() for b in books]
-    import pandas as pd
-    cols = Config.TABLE_COLUMNS if hasattr(Config, 'TABLE_COLUMNS') else \
-      ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
+    cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
-
-    hdr = self._table.horizontalHeader()
-    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     self._update_status()
 
   # ══════════════════════════════════════════════
@@ -440,9 +430,7 @@ class MainWindow(QMainWindow):
       status = ''
     books = self._repo.search(keyword, status)
     rows = [b.to_row() for b in books]
-    import pandas as pd
-    cols = Config.TABLE_COLUMNS if hasattr(Config, 'TABLE_COLUMNS') else \
-      ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
+    cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
     self._update_status()
@@ -557,7 +545,7 @@ class MainWindow(QMainWindow):
     """切换暗色/亮色主题"""
     self._dark_mode = not self._dark_mode
     qss = DARK_QSS if self._dark_mode else LIGHT_QSS
-    self.window().setStyleSheet(qss)
+    self.setStyleSheet(qss)
     self._btn_theme.setText('☀️' if self._dark_mode else '🌙')
     s = self._settings()
     s.setValue('darkMode', self._dark_mode)
@@ -571,7 +559,7 @@ class MainWindow(QMainWindow):
     s = self._settings()
     self._dark_mode = s.value('darkMode', 'true') == 'true'
     if not self._dark_mode:
-      self.window().setStyleSheet(LIGHT_QSS)
+      self.setStyleSheet(LIGHT_QSS)
       self._btn_theme.setText('🌙')
     self._restore_header_state()
 
@@ -596,7 +584,6 @@ class MainWindow(QMainWindow):
   def _save_header_state(self):
     """将表头状态（列顺序、宽度、可见性）保存到 settings.ini"""
     state = self._table.horizontalHeader().saveState().data()
-    import base64
     s = self._settings()
     s.setValue('headerState', base64.b64encode(state).decode('ascii'))
 
@@ -607,7 +594,6 @@ class MainWindow(QMainWindow):
     state_b64 = s.value('headerState', '')
     if state_b64:
       from PyQt6.QtCore import QByteArray
-      import base64
       try:
         hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
       except Exception:

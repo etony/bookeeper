@@ -17,9 +17,3 @@ def load_csv(path: str) -> pd.DataFrame:
 def save_csv(path: str, df: pd.DataFrame):
   """保存 DataFrame 为 UTF-8 BOM 编码的 CSV"""
   df.to_csv(path, index=False, encoding='utf-8-sig')
-
-
-def export_template(path: str, columns: list):
-  """导出空模板 CSV（仅含列头）"""
-  df = pd.DataFrame(columns=columns)
-  df.to_csv(path, index=False, encoding='utf-8-sig')

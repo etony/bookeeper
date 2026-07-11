@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, List, Optional
 
@@ -43,7 +44,7 @@ class Book:
   @classmethod
   def from_douban(cls, data: Dict[str, Any]) -> Optional['Book']:
     """从豆瓣 API 响应创建 Book 对象"""
-    if not data or not isinstance(data, dict) or len(data) <= 5:
+    if not isinstance(data, dict) or len(data) <= 5:
       return None
     book = cls()
     book.isbn = str(data.get('isbn13', ''))
@@ -72,7 +73,6 @@ class Book:
   @staticmethod
   def _calc_recommend(rating: str, raters: str) -> int:
     """综合评分和评价人数计算推荐指数：(评分 - 2.5) * log(人数 + 1)"""
-    import math
     try:
       avg = float(rating) if rating else 0.0
       num = float(raters) if raters else 0.0

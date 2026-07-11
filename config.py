@@ -21,8 +21,6 @@ class Config:
 
   APP_NAME = 'Bookeeper'
   APP_VERSION = '3.0.0'
-  APP_ICON = os.path.join(os.path.dirname(__file__), 'assets', 'icon.ico')
-
   DB_PATH = os.path.join(os.path.dirname(__file__), 'books.db')
 
   # 豆瓣 API
@@ -49,7 +47,6 @@ class Config:
   DEFAULT_SHELF = '未设置'
 
   # 网络与备份
-  API_REQUEST_DELAY = 1.0
   WEB_PORT = 8899
   BACKUP_KEEP = 30
   BACKUP_INTERVAL_MS = 300000

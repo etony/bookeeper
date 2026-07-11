@@ -1,8 +1,12 @@
+import logging
+
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser, QPushButton
 
 from config import Config
+
+LOG = logging.getLogger(__name__)
 from services import get_repo
 from models.book import Book
 from services.douban import DoubanService
@@ -27,8 +31,8 @@ class _CoverWorker(QObject):
       data = api.download_image(self._url, referer=self._referer)
       if data:
         self.cover_ready.emit(self._isbn, data)
-    except Exception:
-      pass
+    except Exception as e:
+      LOG.warning('封面下载失败: %s', e)
 
 
 class DetailDialog(QDialog):

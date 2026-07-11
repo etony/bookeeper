@@ -10,7 +10,6 @@ QPushButton {
 }
 QPushButton:hover { border-width: 2px; }
 QPushButton:pressed { padding-top: 7px; padding-bottom: 5px; }
-QPushButton:disabled { opacity: 0.5; }
 QGroupBox {
   border: 1px solid; border-radius: 8px; margin-top: 6px;
   padding-top: 14px; padding-bottom: 6px; padding-left: 8px; padding-right: 8px;
