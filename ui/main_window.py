@@ -70,10 +70,6 @@ class MainWindow(QMainWindow):
     hdr.setSectionsMovable(True)
     hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     hdr.customContextMenuRequested.connect(self._show_header_menu)
-    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     layout.addWidget(self._table, stretch=1)
 
     sb = QStatusBar(self)
@@ -226,6 +222,12 @@ class MainWindow(QMainWindow):
       ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
+
+    hdr = self._table.horizontalHeader()
+    hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
     self._update_status()
 
   # ══════════════════════════════════════════════
