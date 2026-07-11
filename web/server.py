@@ -1,3 +1,13 @@
+"""
+┌──────────────────────────────────────────┐
+│  内嵌 Web 服务（FastAPI）                 │
+│                                          │
+│  提供完整的图书管理 Web 界面，             │
+│  支持增删改查、豆瓣同步、统计图表。         │
+│  通过主窗口 「Web 服务」按钮启动/停止。     │
+└──────────────────────────────────────────┘
+"""
+
 import asyncio
 
 import uvicorn
@@ -8,7 +18,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from config import Config
 from services import get_repo
 
-# 内联 CSS（暗色风格，无外部依赖）
+# ── 内联 CSS（暗色风格，零外部依赖）─────────────────────
+# 全部样式写在 Python 字符串里，不依赖任何 CSS 文件或 CDN。
 CSS = '''
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#1c1c1f;--surface:#242428;--surface2:#2c2c31;--border:#323238;--border-hover:#404048;--text:#e0e0e4;--text2:#9a9aa0;--text3:#6a6a70;--accent:#e8922a;--accent-hover:#f0a840;--accent-dim:#8a6020;--danger:#e05050;--danger-bg:#3a1818;--radius:8px;--radius-sm:4px}
@@ -50,6 +61,7 @@ form input,form select{width:100%;background:var(--bg);border:1px solid var(--bo
 form input:focus,form select:focus{border-color:var(--accent)}
 '''
 
+# 导航栏 HTML 片段（所有页面共享）
 NAV = '''
 <div class="nav">
 <a href="/">📚 图书列表</a>
@@ -62,27 +74,49 @@ BASE = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name
 
 
 def page(title: str, content: str) -> str:
-  """组装完整 HTML 页面"""
+  """组装完整 HTML 页面（标题 + 导航 + 内容）"""
   return BASE.format(title=title, css=CSS, nav=NAV, content=content)
 
 
 def esc(val) -> str:
-  """HTML 转义，防止 XSS"""
+  """
+  HTML 转义，防止 XSS 攻击。
+
+  将 & < > " 等特殊字符转为 HTML 实体，
+  确保用户输入的内容不会破坏页面结构。
+  """
   s = str(val) if val is not None else ''
   return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
 class BookWebServer:
-  """内嵌 FastAPI Web 服务，提供完整的图书管理 Web 界面"""
+  """
+  内嵌 FastAPI Web 服务。
+
+  提供路由：
+    GET  /           → 图书列表（分页 + 搜索）
+    GET  /add        → 添加图书表单
+    POST /add        → 提交添加
+    GET  /edit/{id}  → 编辑表单（支持?sync=1从豆瓣同步）
+    POST /edit/{id}  → 提交编辑
+    GET  /delete/{id} → 删除图书
+    GET  /book/{id}  → 图书详情（含封面）
+    GET  /cover/{id} → 封面代理（解决豆瓣防盗链）
+    GET  /stats      → 统计面板
+
+  全部返回纯 HTML，不依赖 JavaScript。
+  """
 
   def __init__(self):
     self._repo = get_repo()
     self._app = FastAPI(title='Bookeeper API')
     self._server = None
-    self._douban_tried = set()  # 避免重复查询豆瓣
+    # 避免在详情页重复查询豆瓣 API（单次会话内有效）
+    self._douban_tried = set()
     self._setup_routes()
 
   def _setup_routes(self):
+    """注册所有 FastAPI 路由"""
     app = self._app
 
     @app.get('/', response_class=HTMLResponse)
@@ -121,7 +155,12 @@ class BookWebServer:
 
     @app.get('/add', response_class=HTMLResponse)
     def add_page(isbn: str = '', fetch: str = ''):
-      """添加图书页面：支持 ISBN 自动获取豆瓣数据"""
+      """
+      添加图书页面。
+
+      支持 ?isbn=xxx&fetch=1 参数自动获取豆瓣数据，
+      填入表单各字段，用户确认后提交保存。
+      """
       vals = dict(isbn='', title='', author='', publisher='', price='', rating='0', status='默认', shelf='')
       if fetch == '1' and isbn:
         from services.douban import DoubanService
@@ -166,10 +205,16 @@ class BookWebServer:
 
     @app.get('/edit/{isbn}', response_class=HTMLResponse)
     def edit_page(isbn: str, sync: str = ''):
-      """编辑图书页面：支持一键从豆瓣同步"""
+      """
+      编辑图书页面。
+
+      支持 ?sync=1 从豆瓣同步最新数据。
+      同步后自动更新图书信息并保存到数据库。
+      """
       book = self._repo.get_by_isbn(isbn)
       if not book:
         return page('错误', '<div class="msg msg-err">图书不存在</div>')
+
       if sync == '1':
         from services.douban import DoubanService
         api_book = DoubanService().get_book_by_isbn(isbn)
@@ -190,6 +235,7 @@ class BookWebServer:
           msg = '<div class="msg msg-err">豆瓣未找到该 ISBN 对应的图书</div>'
       else:
         msg = ''
+
       opts = ''.join(f'<option{" selected" if s==book.status else ""}>{s}</option>' for s in Config.STATUSES)
       return page(f'编辑 - {book.title}', f'''
 {msg}
@@ -234,7 +280,12 @@ class BookWebServer:
 
     @app.get('/cover/{isbn}')
     def cover_proxy(isbn: str):
-      """封面代理：解决豆瓣图片防盗链问题"""
+      """
+      封面代理。
+
+      豆瓣图片有防盗链，直接在 HTML 中引用豆瓣 URL 会 403。
+      此路由充当代理：用合适的 Referer 下载图片后返回给浏览器。
+      """
       book = self._repo.get_by_isbn(isbn)
       if not book or not book.cover_url:
         raise HTTPException(status_code=404)
@@ -250,11 +301,19 @@ class BookWebServer:
 
     @app.get('/book/{isbn}', response_class=HTMLResponse)
     def book_detail(isbn: str):
-      """图书详情页：封面、信息、上下本导航、推荐度"""
+      """
+      图书详情页。
+
+      展示完整图书信息、上下本导航、推荐度。
+      如果数据库缺少封面 URL，尝试从豆瓣获取。
+      """
       book = self._repo.get_by_isbn(isbn)
       if not book:
         return page('未找到', '<div class="msg msg-err">图书不存在</div>')
+
       from models.book import Book as BookModel
+
+      # 如果缺少封面且之前没试过，尝试从豆瓣补充
       if not book.cover_url and isbn not in self._douban_tried:
         self._douban_tried.add(isbn)
         from services.douban import DoubanService
@@ -264,11 +323,14 @@ class BookWebServer:
           if api_book.pubdate:
             book.pubdate = api_book.pubdate
           self._repo.upsert(book)
+
+      # 获取全部 ISBN 列表，构造上下本导航
       all_books = self._repo.get_all()
       isbn_list = [b.isbn for b in all_books]
       idx = isbn_list.index(isbn) if isbn in isbn_list else -1
       prev_link = f'/book/{esc(isbn_list[idx-1])}' if idx > 0 else ''
       next_link = f'/book/{esc(isbn_list[idx+1])}' if 0 <= idx < len(isbn_list)-1 else ''
+
       nav_html = '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px">'
       if prev_link:
         nav_html += f'<a href="{prev_link}" style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);text-decoration:none">◀ 上一本</a>'
@@ -279,9 +341,11 @@ class BookWebServer:
       else:
         nav_html += '<span style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3)">下一本 ▶</span>'
       nav_html += '</div>'
+
       rec = BookModel._calc_recommend(book.rating, book.raters)
       cover_url = f'/cover/{esc(isbn)}' if book.cover_url else ''
       cover = f'<img src="{cover_url}" alt="封面" style="width:200px;height:280px;object-fit:contain;border-radius:4px;background:#2c2c31">' if cover_url else '<div style="width:200px;height:280px;border-radius:4px;background:#2c2c31;display:flex;align-items:center;justify-content:center;color:#6a6a70;font-size:13px">无封面</div>'
+
       fields = [
         ('ISBN', book.isbn), ('书名', book.title), ('作者', book.author),
         ('出版社', book.publisher), ('价格', book.price),
@@ -306,11 +370,20 @@ class BookWebServer:
 
     @app.get('/stats', response_class=HTMLResponse)
     def stats():
-      """统计页面：阅读状态 / 出版社 TOP10 / 评分分布"""
+      """
+      统计页面。
+
+      用纯 CSS 柱状图展示：
+        - 阅读状态分布（各状态数量 + 百分比）
+        - 出版社 TOP10
+        - 评分分布（5 个区间）
+      """
       status_counts = self._repo.status_counts()
       pubs = self._repo.publisher_top(10)
       dist = self._repo.rating_distribution()
+
       charts = ''
+
       if status_counts:
         total = sum(status_counts.values())
         bars = ''
@@ -318,24 +391,33 @@ class BookWebServer:
           pct = v / total * 100
           bars += f'<div class="chart-bar"><span class="label">{esc(k)}</span><div class="fill" style="width:{max(2,pct*3)}%">{v} ({pct:.1f}%)</div></div>'
         charts += f'<div class="chart-box"><h3>阅读状态</h3>{bars}</div>'
+
       if pubs:
         mx = pubs[0][1]
         bars = ''
         for k, v in pubs:
           bars += f'<div class="chart-bar"><span class="label">{esc(k)}</span><div class="fill" style="width:{max(5,v/mx*80)}%">{v}</div></div>'
         charts += f'<div class="chart-box"><h3>出版社 TOP10</h3>{bars}</div>'
+
       if any(dist.values()):
         mx = max(dist.values())
         bars = ''
         for k, v in dist.items():
           bars += f'<div class="chart-bar"><span class="label">{k}</span><div class="fill" style="width:{max(5,v/mx*80)}%">{v}</div></div>'
         charts += f'<div class="chart-box"><h3>评分分布</h3>{bars}</div>'
+
       if not charts:
         charts = '<p style="color:#9a9aa0">暂无数据</p>'
+
       return page('统计', f'<h2>📊 统计面板</h2>{charts}')
 
   def start(self):
-    """启动 uvicorn 服务（阻塞，需在独立线程中运行）"""
+    """
+    启动 uvicorn 服务。
+
+    这是一个阻塞调用，必须在独立线程中执行。
+    使用 asyncio 事件循环支持 FastAPI 的异步特性。
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     config = uvicorn.Config(self._app, host='127.0.0.1', port=Config.WEB_PORT, log_level='warning')

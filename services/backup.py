@@ -1,3 +1,13 @@
+"""
+┌──────────────────────────────────────────┐
+│  自动备份服务                             │
+│                                          │
+│  定时复制数据库文件到 backups/ 目录，      │
+│  并自动清理 30 天前的旧备份。             │
+│  所有操作异常安全——失败只打日志不崩溃。     │
+└──────────────────────────────────────────┘
+"""
+
 import os
 import time
 import logging
@@ -9,17 +19,40 @@ LOG = logging.getLogger(__name__)
 
 
 class BackupService:
-  """数据库自动备份服务，带旧备份清理机制"""
+  """
+  数据库自动备份服务。
+
+  用法：
+    svc = BackupService()
+    svc.backup()          # 立即备份
+    # 与 QTimer 配合实现定时备份
+
+  备份文件命名：book_backup_YYYYMMDD_HHMMSS.db
+  """
 
   def __init__(self, db_path: str = None):
+    # db_path 默认取 Config.DB_PATH，也可传入自定义路径（测试用）
     self._db_path = db_path or Config.DB_PATH
 
   def backup(self):
-    """执行备份：复制数据库到 backups/ 目录，失败时仅打日志不抛出异常"""
+    """
+    执行一次备份。
+
+    流程：
+      1. 检查数据库文件是否存在
+      2. 创建 backups/ 目录（不存在则新建）
+      3. 以时间戳命名复制数据库
+      4. 清理超出保留数量的旧备份
+      5. 所有异常都只打日志，不抛出
+
+    返回备份文件的路径，失败返回 None。
+    """
     if not os.path.exists(self._db_path):
       return None
+
     base_dir = os.path.dirname(self._db_path)
     backup_dir = os.path.join(base_dir, 'backups')
+
     try:
       os.makedirs(backup_dir, exist_ok=True)
       ts = time.strftime('%Y%m%d_%H%M%S')
@@ -33,7 +66,12 @@ class BackupService:
       return None
 
   def _clean(self, backup_dir: str, keep: int = None):
-    """只保留最近 keep 份备份，删除更旧的"""
+    """
+    清理旧备份，只保留最近 keep 份。
+
+    原理：按文件名排序（时间戳在前缀中），
+    删除排在前面的（即最早创建的）旧文件。
+    """
     keep = keep or Config.BACKUP_KEEP
     try:
       files = sorted([f for f in os.listdir(backup_dir)

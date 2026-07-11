@@ -1,3 +1,13 @@
+"""
+┌──────────────────────────────────────────┐
+│  主窗口                                  │
+│                                          │
+│  应用的中央协调者，连接：                  │
+│    UI 表单 ↔ 数据库 ↔ 豆瓣 API ↔ Web     │
+│    CSV 导入导出 ↔ 自动备份 ↔ 主题切换     │
+└──────────────────────────────────────────┘
+"""
+
 import os
 import base64
 import webbrowser
@@ -19,8 +29,25 @@ from services.backup import BackupService
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 
+
 class MainWindow(QMainWindow):
-  """主窗口，作为中央协调者连接 UI、数据库、API、Web 服务等所有模块"""
+  """
+  主窗口——所有功能的入口点。
+
+  布局从上到下：
+    工具栏（CSV / 统计 / 豆瓣搜索 / Web / 主题）
+    图书编辑表单（ISBN 查询 / 新增 / 修改）
+    搜索栏（关键词 + 状态下拉）
+    图书列表表格（可排序、右键菜单）
+
+  init 流程：
+    _setup_ui()         → 构建所有界面控件
+    _init_table()       → 初始化表格模型
+    _connect_signals()  → 绑定信号槽
+    _setup_shortcuts()  → 注册快捷键
+    _setup_backup_timer() → 启动定时备份
+    _load_settings()    → 恢复上次关闭时的状态
+  """
 
   def __init__(self):
     super().__init__()
@@ -40,6 +67,7 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _setup_ui(self):
+    """构建主窗口的全部控件和布局"""
     self.setWindowTitle(Config.APP_NAME)
     self.setWindowIcon(QIcon())
     self.resize(*Config.MAIN_WINDOW_SIZE)
@@ -55,6 +83,7 @@ class MainWindow(QMainWindow):
     layout.addWidget(self._make_book_form())
     layout.addWidget(self._make_search_bar())
 
+    # 图书表格——主内容区，占据剩余空间
     self._table = QTableView()
     self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -103,12 +132,20 @@ class MainWindow(QMainWindow):
     return w
 
   def _make_book_form(self):
-    """图书信息编辑表单：ISBN、书名、作者、出版社、价格、评分、状态、书柜、日期"""
+    """
+    图书信息编辑表单。
+
+    包含两行：
+    第一行：ISBN 输入 + 获取/更新/清空按钮
+    第二行：书名/作者/出版社
+    第三行：价格/评分/状态/书柜/购书日期/已读日期
+    """
     g = QGroupBox('📖 图书信息')
     layout = QVBoxLayout(g)
     layout.setContentsMargins(8, 14, 8, 6)
     layout.setSpacing(4)
 
+    # ── 第一行：ISBN + 操作按钮 ──────────────────────────
     r0 = QHBoxLayout()
     r0.setSpacing(4)
     r0.addWidget(QLabel('ISBN'))
@@ -123,6 +160,7 @@ class MainWindow(QMainWindow):
       r0.addWidget(btn)
     layout.addLayout(r0)
 
+    # ── 第二行：书名 / 作者 / 出版社 ─────────────────────
     self._title_input = QLineEdit(placeholderText='书名')
     self._author_input = QLineEdit(placeholderText='作者/译者')
     self._publisher_input = QLineEdit(placeholderText='出版社')
@@ -135,6 +173,7 @@ class MainWindow(QMainWindow):
       r1.addWidget(w, stretch=1)
     layout.addLayout(r1)
 
+    # ── 第三行：价格 / 评分 / 状态 / 书柜 / 日期 ────────
     self._price_input = QLineEdit(placeholderText='定价')
     self._price_input.setFixedWidth(80)
     self._rating_input = QLineEdit(placeholderText='评分/人数')
@@ -199,11 +238,17 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _init_table(self):
-    """初始化表格模型"""
+    """
+    初始化表格模型。
+
+    创建空的 BookTableModel，绑定到 QTableView，
+    设置列宽模式，然后加载数据。
+    """
     from models.table_model import BookTableModel
     df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
+    # 列宽模式：默认拉伸填满，前三列可交互调整
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
@@ -212,7 +257,12 @@ class MainWindow(QMainWindow):
     self._load_data()
 
   def _load_data(self):
-    """从数据库重新加载全量数据到表格"""
+    """
+    从数据库重新加载全量数据到表格。
+
+    每次增删改查后调用此方法刷新界面。
+    数据通过 DataFrame 传给 BookTableModel.load_dataframe()。
+    """
     books = self._repo.get_all()
     rows = [b.to_row() for b in books]
     cols = Config.TABLE_COLUMNS
@@ -245,6 +295,7 @@ class MainWindow(QMainWindow):
     self._search_input.returnPressed.connect(self._search)
 
   def _setup_shortcuts(self):
+    """注册全局快捷键"""
     QShortcut(QKeySequence('Ctrl+S'), self, self._save_csv)
     QShortcut(QKeySequence('Ctrl+F'), self, self._search_input.setFocus)
     QShortcut(QKeySequence('Ctrl+R'), self, self._reset_search)
@@ -261,6 +312,7 @@ class MainWindow(QMainWindow):
     self._backup_timer.start(Config.BACKUP_INTERVAL_MS)
 
   def _do_backup(self):
+    """执行定时备份（如果表格中有数据的话）"""
     if self._model.rowCount() == 0:
       return
     self._backup_svc.backup()
@@ -270,24 +322,36 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _fetch_book(self):
-    """从豆瓣 API 获取 ISBN 对应的图书信息并填入表单"""
+    """
+    从豆瓣 API 获取 ISBN 对应的图书信息并填入表单。
+
+    流程：
+      1. 清洗 ISBN（去除非数字字符）
+      2. 校验 ISBN-13 或 ISBN-10 的校验位
+      3. 调用豆瓣 API 查询
+      4. 填入表单 + 自动存入数据库
+      5. 刷新表格
+    """
     from utils import clean_isbn, is_valid_isbn13, is_valid_isbn10
     raw = self._isbn_input.text().strip()
     isbn = clean_isbn(raw)
     if not isbn:
       return
+
     if len(isbn) == 13 and not is_valid_isbn13(isbn):
       QMessageBox.warning(self, '错误', f'ISBN-13 校验位无效: {isbn}')
       return
     if len(isbn) == 10 and not is_valid_isbn10(isbn):
       QMessageBox.warning(self, '错误', f'ISBN-10 校验位无效: {isbn}')
       return
+
     self.statusBar().showMessage('正在查询豆瓣...')
     book = self._api.get_book_by_isbn(isbn)
     if not book:
       QMessageBox.warning(self, '错误', f'未找到图书: {isbn}')
       self.statusBar().showMessage('查询失败')
       return
+
     self._fill_form(book)
     self._repo.upsert(book)
     self._load_data()
@@ -308,7 +372,12 @@ class MainWindow(QMainWindow):
     self._set_date(self._end_date, book.end_date)
 
   def _update_book(self):
-    """从表单读取数据更新到数据库"""
+    """
+    从表单读取数据，更新到数据库。
+
+    ISBN 从第 0 列取（表单中不可修改的隐含主键）。
+    评分字段格式是 "评分/人数"，需要拆开。
+    """
     row = [
       self._isbn_input.text(),
       self._title_input.text(),
@@ -323,24 +392,16 @@ class MainWindow(QMainWindow):
       self._get_date(self._end_date),
     ]
     book = Book(
-      isbn=row[0],
-      title=row[1],
-      author=row[2],
-      publisher=row[3],
-      price=row[4],
-      rating=row[5],
-      raters=row[6],
-      status=row[7],
-      shelf=row[8],
-      start_date=row[9],
-      end_date=row[10],
+      isbn=row[0], title=row[1], author=row[2], publisher=row[3],
+      price=row[4], rating=row[5], raters=row[6], status=row[7],
+      shelf=row[8], start_date=row[9], end_date=row[10],
     )
     self._repo.upsert(book)
     self._load_data()
     self.statusBar().showMessage('已更新')
 
   def _clear_form(self):
-    """清空表单所有输入"""
+    """清空表单所有输入，聚焦到 ISBN 输入框"""
     self._isbn_input.clear()
     self._title_input.clear()
     self._author_input.clear()
@@ -358,6 +419,7 @@ class MainWindow(QMainWindow):
     def val(col):
       v = index.sibling(index.row(), col).data()
       return str(v) if v is not None else ''
+
     self._isbn_input.setText(val(0))
     self._title_input.setText(val(1))
     self._author_input.setText(val(2))
@@ -464,7 +526,12 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _load_csv(self):
-    """加载 CSV 文件并导入到数据库"""
+    """
+    加载 CSV 文件并导入到数据库。
+
+    用 QProgressDialog 显示进度，
+    避免大文件导入时用户以为程序卡死了。
+    """
     path, _ = QFileDialog.getOpenFileName(self, '加载 CSV', '.', 'CSV 文件 (*.csv)')
     if not path:
       return
@@ -508,7 +575,12 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _toggle_web(self):
-    """启动/停止内嵌 FastAPI Web 服务"""
+    """
+    启动/停止内嵌 FastAPI Web 服务。
+
+    启动时创建独立线程运行 uvicorn，
+    避免阻塞 Qt 事件循环。
+    """
     if self._btn_web.text() == '🛑 停止服务':
       if hasattr(self, '_web_worker') and self._web_worker:
         self._web_worker.stop()
@@ -517,6 +589,7 @@ class MainWindow(QMainWindow):
       self._btn_web.setText('🌐 Web 服务')
       self.statusBar().showMessage('Web 服务已停止')
       return
+
     self._btn_web.setText('⏳ 启动中...')
     self.statusBar().showMessage('正在启动 Web 服务...')
     self._web_thread = QThread()
@@ -528,12 +601,14 @@ class MainWindow(QMainWindow):
     self._web_thread.start()
 
   def _on_web_started(self):
+    """Web 服务启动成功：更新按钮状态，在浏览器中打开"""
     url = f'http://127.0.0.1:{Config.WEB_PORT}'
     self._btn_web.setText('🛑 停止服务')
     self.statusBar().showMessage(f'Web 服务已启动: {url}')
     webbrowser.open(url)
 
   def _on_web_failed(self, msg: str):
+    """Web 服务启动失败：恢复按钮状态"""
     self._btn_web.setText('🌐 Web 服务')
     self.statusBar().showMessage(f'Web 服务启动失败: {msg}')
 
@@ -551,6 +626,7 @@ class MainWindow(QMainWindow):
     s.setValue('darkMode', self._dark_mode)
 
   def _settings(self):
+    """读取 settings.ini（存储窗口状态和偏好设置）"""
     return QSettings(os.path.join(os.path.dirname(__file__), '..', 'settings.ini'),
                      QSettings.Format.IniFormat)
 
@@ -577,6 +653,7 @@ class MainWindow(QMainWindow):
     menu.exec(hdr.mapToGlobal(pos))
 
   def _toggle_column(self, col):
+    """切换列的显隐"""
     hdr = self._table.horizontalHeader()
     hdr.setSectionHidden(col, not hdr.isSectionHidden(col))
     self._save_header_state()
@@ -598,6 +675,7 @@ class MainWindow(QMainWindow):
         hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
       except Exception:
         pass
+    # 断开旧的信号连接以防重复绑定
     try:
       hdr.sectionMoved.disconnect()
     except TypeError:
@@ -622,8 +700,14 @@ class MainWindow(QMainWindow):
   #  辅助
   # ══════════════════════════════════════════════
 
-  def _set_date(self, edit: QDateEdit, text: str):
-    """设置日期控件的值，无效文本则重置为 1900-01-01"""
+  @staticmethod
+  def _set_date(edit: QDateEdit, text: str):
+    """
+    设置日期控件的值。
+
+    如果传入的文本无效或为空，重置为 1900-01-01。
+    1900-01-01 被特殊处理为"未设置"。
+    """
     if text and text.strip():
       d = QDate.fromString(text.strip(), 'yyyy-MM-dd')
       if d.isValid():
@@ -631,8 +715,13 @@ class MainWindow(QMainWindow):
         return
     edit.setDate(QDate(1900, 1, 1))
 
-  def _get_date(self, edit: QDateEdit) -> str:
-    """获取日期控件的文本，1900-01-01 视为空"""
+  @staticmethod
+  def _get_date(edit: QDateEdit) -> str:
+    """
+    获取日期控件的文本。
+
+    1900-01-01 被视为"未设置"，返回空字符串。
+    """
     d = edit.date()
     if d.isValid() and d > QDate(1900, 1, 1):
       return d.toString('yyyy-MM-dd')
@@ -640,9 +729,17 @@ class MainWindow(QMainWindow):
 
 
 class _WebWorker(QObject):
-  """在后台线程中运行 FastAPI Web 服务"""
-  started = pyqtSignal()
-  failed = pyqtSignal(str)
+  """
+  在后台线程中运行 FastAPI Web 服务。
+
+  为什么需要这个类？
+    uvicorn.run() 是阻塞调用，如果在主线程执行，
+    Qt 界面会卡死。通过 moveToThread + 信号驱动，
+    让 Web 服务在独立线程中运行。
+  """
+
+  started = pyqtSignal()      # 服务启动成功
+  failed = pyqtSignal(str)    # 服务启动失败，附带错误消息
 
   def __init__(self):
     super().__init__()
