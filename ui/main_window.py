@@ -54,6 +54,7 @@ class MainWindow(QMainWindow):
     self._repo = get_repo()
     self._api = DoubanService()
     self._backup_svc = BackupService()
+    self._dirty = False
     self._dark_mode = True
     self._setup_ui()
     self._init_table()
@@ -311,11 +312,22 @@ class MainWindow(QMainWindow):
     self._backup_timer.timeout.connect(self._do_backup)
     self._backup_timer.start(Config.BACKUP_INTERVAL_MS)
 
+  def _mark_dirty(self):
+    """标记数据已变更，下次定时器触发时执行备份"""
+    self._dirty = True
+
   def _do_backup(self):
-    """执行定时备份（如果表格中有数据的话）"""
-    if self._model.rowCount() == 0:
+    """执行定时备份：无数据或数据无变更则跳过"""
+    if self._model.rowCount() == 0 or not self._dirty:
       return
-    self._backup_svc.backup()
+    self._dirty = False
+    QTimer.singleShot(0, self._backup_svc.backup)
+
+  def closeEvent(self, event):
+    """关闭窗口前强制备份一次"""
+    if self._model.rowCount():
+      self._backup_svc.backup()
+    super().closeEvent(event)
 
   # ══════════════════════════════════════════════
   #  图书操作
@@ -354,6 +366,7 @@ class MainWindow(QMainWindow):
 
     self._fill_form(book)
     self._repo.upsert(book)
+    self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
 
@@ -397,6 +410,7 @@ class MainWindow(QMainWindow):
       shelf=row[8], start_date=row[9], end_date=row[10],
     )
     self._repo.upsert(book)
+    self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage('已更新')
 
@@ -478,6 +492,7 @@ class MainWindow(QMainWindow):
     if action == delete_action:
       for isbn in isbn_list:
         self._repo.delete(isbn)
+      self._mark_dirty()
       self._load_data()
 
   # ══════════════════════════════════════════════
@@ -518,6 +533,7 @@ class MainWindow(QMainWindow):
     """豆瓣搜索结果回调：填入表单并存入数据库"""
     self._fill_form(book)
     self._repo.upsert(book)
+    self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已从豆瓣添加: {book.title}')
 
@@ -544,6 +560,7 @@ class MainWindow(QMainWindow):
       df = load_csv(path)
       count = self._repo.import_df(df)
       progress.close()
+      self._mark_dirty()
       self._load_data()
       self._file_label.setText(os.path.basename(path))
       QMessageBox.information(self, '提示', f'导入完成，共处理 {count} 条记录')
