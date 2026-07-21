@@ -441,8 +441,10 @@ class MainWindow(QMainWindow):
     self._price_input.setText(val(4))
     self._rating_input.setText(f'{val(5)} / {val(6)}')
     status = val(7)
+    self._status_combo.blockSignals(True)
     self._status_combo.setCurrentIndex(
       Config.STATUSES.index(status) if status in Config.STATUSES else -1)
+    self._status_combo.blockSignals(False)
     self._shelf_input.setText(val(8))
     self._set_date(self._start_date, val(9))
     self._set_date(self._end_date, val(10))

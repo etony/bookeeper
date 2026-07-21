@@ -71,44 +71,6 @@ class BookTableModel(QAbstractTableModel):
         return str(section + 1)
     return None
 
-  # ── 数据修改 ──────────────────────────────────────────
-
-  def update_or_insert(self, row: list):
-    """
-    根据 ISBN 更新或插入一行。
-
-    如果 ISBN 已存在 → 更新该行的所有列
-    如果 ISBN 不存在 → 在末尾追加新行
-
-    这是为将来编辑功能预留的，目前主窗口直接用 _load_data 全量刷新。
-    """
-    isbn = str(row[0])
-    self.beginResetModel()
-    mask_o = self._original.iloc[:, 0].astype(str) == isbn
-    found = mask_o.any()
-    cols = self._original.columns.tolist()
-    if found:
-      for idx in range(1, min(len(row), len(cols))):
-        self._original.loc[mask_o, cols[idx]] = row[idx]
-    else:
-      new_row = pd.DataFrame([row[:len(cols)]], columns=cols)
-      self._original = pd.concat([self._original, new_row], ignore_index=True)
-    self._data = self._original.copy()
-    self.endResetModel()
-
-  def delete_by_isbn(self, isbn: str):
-    """
-    根据 ISBN 从表格中删除行。
-
-    删除后同步更新 _original 和 _data，
-    保持两者一致。
-    """
-    self.beginResetModel()
-    mask_o = self._original.iloc[:, 0].astype(str) == isbn
-    self._original = self._original[~mask_o]
-    self._data = self._original.copy()
-    self.endResetModel()
-
   def sort(self, column: int, order: Qt.SortOrder):
     """
     按指定列排序。

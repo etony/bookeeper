@@ -27,13 +27,21 @@ def main():
 
   流程：
     1. 创建 QApplication（Qt 应用必备）
-    2. 设置应用名称（影响窗口标题和系统托盘等）
-    3. 加载暗色主题作为默认外观
-    4. 创建并显示主窗口
-    5. 进入 Qt 事件循环，等待用户操作
+    2. 单实例检测
+    3. 设置应用名称（影响窗口标题和系统托盘等）
+    4. 加载暗色主题作为默认外观
+    5. 创建并显示主窗口
+    6. 进入 Qt 事件循环，等待用户操作
   """
   app = QApplication(sys.argv)
   app.setApplicationName(Config.APP_NAME)
+
+  from PyQt6.QtCore import QSharedMemory
+  from PyQt6.QtWidgets import QMessageBox
+  _single = QSharedMemory('Bookeeper-' + Config.APP_NAME)
+  if not _single.create(1):
+    QMessageBox.warning(None, Config.APP_NAME, '程序已在运行中')
+    sys.exit(0)
 
   from ui.theme import DARK_QSS
   app.setStyleSheet(DARK_QSS)
