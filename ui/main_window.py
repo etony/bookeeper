@@ -16,7 +16,7 @@ import pandas as pd
 from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, pyqtSignal
 from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
-  QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+  QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QTableView,
   QDateEdit, QFileDialog, QMessageBox, QMenu, QHeaderView, QStatusBar, QProgressDialog,
 )
@@ -126,6 +126,8 @@ class MainWindow(QMainWindow):
     for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web, self._btn_theme):
       btn.setFixedHeight(32)
       row.addWidget(btn)
+    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web):
+      btn.setMinimumWidth(85)
 
     self._file_label = QLabel('')
     self._file_label.setStyleSheet('color: #7a7a80; font-size: 12px;')
@@ -161,31 +163,17 @@ class MainWindow(QMainWindow):
       r0.addWidget(btn)
     layout.addLayout(r0)
 
-    # ── 第二行：书名 / 作者 / 出版社 ─────────────────────
+    # ── 第 2~4 行：改用 QGridLayout 保证列对齐 ──────────
     self._title_input = QLineEdit(placeholderText='书名')
     self._author_input = QLineEdit(placeholderText='作者/译者')
     self._publisher_input = QLineEdit(placeholderText='出版社')
-    r1 = QHBoxLayout()
-    r1.setSpacing(4)
-    for label, w in [(QLabel('书名'), self._title_input),
-                     (QLabel('作者'), self._author_input),
-                     (QLabel('出版'), self._publisher_input)]:
-      r1.addWidget(label)
-      r1.addWidget(w, stretch=1)
-    layout.addLayout(r1)
-
-    # ── 第三行：价格 / 评分 / 状态 / 书柜 / 日期 ────────
     self._price_input = QLineEdit(placeholderText='定价')
-    self._price_input.setFixedWidth(80)
     self._rating_input = QLineEdit(placeholderText='评分/人数')
     self._rating_input.setReadOnly(True)
-    self._rating_input.setFixedWidth(110)
     self._status_combo = QComboBox()
     self._status_combo.addItems(Config.STATUSES)
     self._status_combo.setCurrentIndex(-1)
-    self._status_combo.setFixedWidth(85)
     self._shelf_input = QLineEdit(placeholderText='位置')
-    self._shelf_input.setFixedWidth(85)
     self._start_date = QDateEdit()
     self._end_date = QDateEdit()
     for edit in (self._start_date, self._end_date):
@@ -193,29 +181,31 @@ class MainWindow(QMainWindow):
       edit.setCalendarPopup(True)
       edit.setSpecialValueText(' ')
       edit.setDate(QDate(1900, 1, 1))
-      edit.setFixedWidth(120)
-    r2 = QHBoxLayout()
-    r2.setSpacing(4)
-    for label, w in [(QLabel('价格'), self._price_input),
-                     (QLabel('评分'), self._rating_input),
-                     (QLabel('状态'), self._status_combo),
-                     (QLabel('书柜'), self._shelf_input),
-                     (QLabel('购书'), self._start_date),
-                     (QLabel('已读'), self._end_date)]:
-      r2.addWidget(label)
-      r2.addWidget(w)
-    r2.addStretch()
-    layout.addLayout(r2)
+      edit.setFixedWidth(105)
+    grid = QGridLayout()
+    grid.setSpacing(4)
+    grid.addWidget(QLabel('书名'), 0, 0); grid.addWidget(self._title_input, 0, 1)
+    grid.addWidget(QLabel('作者'), 0, 2); grid.addWidget(self._author_input, 0, 3)
+    grid.addWidget(QLabel('出版'), 0, 4); grid.addWidget(self._publisher_input, 0, 5)
+    grid.addWidget(QLabel('价格'), 1, 0); grid.addWidget(self._price_input, 1, 1)
+    grid.addWidget(QLabel('评分'), 1, 2); grid.addWidget(self._rating_input, 1, 3)
+    grid.addWidget(QLabel('状态'), 1, 4); grid.addWidget(self._status_combo, 1, 5)
+    grid.addWidget(QLabel('书柜'), 2, 0); grid.addWidget(self._shelf_input, 2, 1)
+    grid.addWidget(QLabel('购书'), 2, 2); grid.addWidget(self._start_date, 2, 3)
+    grid.addWidget(QLabel('已读'), 2, 4); grid.addWidget(self._end_date, 2, 5)
+    grid.setColumnStretch(1, 1)
+    grid.setColumnStretch(3, 1)
+    grid.setColumnStretch(5, 1)
+    layout.addLayout(grid)
     return g
 
   def _make_search_bar(self):
     """搜索栏：关键词输入 + 状态下拉 + 查询/重置按钮"""
-    w = QWidget()
-    row = QHBoxLayout(w)
-    row.setContentsMargins(0, 0, 0, 0)
+    g = QGroupBox('🔎 搜索')
+    row = QHBoxLayout(g)
+    row.setContentsMargins(6, 14, 6, 6)
     row.setSpacing(4)
 
-    row.addWidget(QLabel('搜索'))
     self._search_input = QLineEdit()
     self._search_input.setPlaceholderText('输入关键词搜索书名/作者/出版社/ISBN')
     self._search_input.setFixedHeight(30)
@@ -232,7 +222,7 @@ class MainWindow(QMainWindow):
     self._btn_reset.setFixedHeight(30)
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_reset)
-    return w
+    return g
 
   # ══════════════════════════════════════════════
   #  数据模型
@@ -391,8 +381,13 @@ class MainWindow(QMainWindow):
     ISBN 从第 0 列取（表单中不可修改的隐含主键）。
     评分字段格式是 "评分/人数"，需要拆开。
     """
+    isbn = self._isbn_input.text().strip()
+    title = self._title_input.text().strip()
+    if not isbn and not title:
+      QMessageBox.warning(self, '提示', '请至少填写 ISBN 或书名')
+      return
     row = [
-      self._isbn_input.text(),
+      isbn,
       self._title_input.text(),
       self._author_input.text(),
       self._publisher_input.text(),
@@ -467,9 +462,11 @@ class MainWindow(QMainWindow):
     dlg.exec()
 
   def _on_status_changed(self, text: str):
-    """状态设为'已读'时，自动填入当天日期"""
+    """状态设为'已读'时自动填入当天日期，切回非'已读'时清空"""
     if text == '已读' and self._end_date.date() <= QDate(1900, 1, 1):
       self._end_date.setDate(QDate.currentDate())
+    elif text != '已读':
+      self._end_date.setDate(QDate(1900, 1, 1))
 
   def _show_context_menu(self, pos):
     """表格右键菜单：删除选中行"""
@@ -586,7 +583,7 @@ class MainWindow(QMainWindow):
   def _show_stats(self):
     """打开统计面板"""
     from ui.stats_dialog import StatsDialog
-    dlg = StatsDialog(self._repo, self)
+    dlg = StatsDialog(self._repo, self, dark_mode=self._dark_mode)
     dlg.exec()
 
   # ══════════════════════════════════════════════

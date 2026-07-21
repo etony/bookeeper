@@ -83,6 +83,11 @@ QDialog { background-color: #1c1c1f; }
 QTextBrowser { background-color: #242428; }
 QMessageBox { background-color: #1c1c1f; }
 QMessageBox QLabel { color: #e0e0e4; }
+QToolTip {
+  background-color: #26262b; color: #e0e0e4;
+  border: 1px solid #38383f; padding: 4px 8px;
+  border-radius: 4px; font-size: 12px;
+}
 
 '''
 
@@ -133,4 +138,9 @@ QDialog { background-color: #f8f6f2; }
 QTextBrowser { background-color: #ffffff; }
 QMessageBox { background-color: #f8f6f2; }
 QMessageBox QLabel { color: #2c3e50; }
+QToolTip {
+  background-color: #f0eee8; color: #2c3e50;
+  border: 1px solid #d8d6d0; padding: 4px 8px;
+  border-radius: 4px; font-size: 12px;
+}
 '''
