@@ -10,7 +10,7 @@
 import logging
 
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QImage, QPixmap, QPalette
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser, QPushButton
 
 from config import Config
@@ -46,8 +46,8 @@ class _CoverWorker(QObject):
   def run(self):
     """在工作线程中执行下载"""
     try:
-      api = DoubanService()
-      data = api.download_image(self._url, referer=self._referer)
+      from services.covers import get_cover
+      data, _ = get_cover(self._isbn, self._url, referer=self._referer)
       if data:
         self.cover_ready.emit(self._isbn, data)
     except Exception as e:
@@ -95,10 +95,10 @@ class DetailDialog(QDialog):
     # ── 左侧：封面 ──────────────────────────────────────
     self._cover = QLabel('无封面')
     self._cover.setFixedSize(200, 280)
-    self._cover.setScaledContents(True)      # 图片自动缩放填满
+    self._cover.setScaledContents(True)
     self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self._cover.setStyleSheet(
-      'border: 1px solid #38383f; border-radius: 4px; background-color: #26262b; color: #6a6a70; font-size: 13px;')
+      'border: 1px solid; border-radius: 4px; font-size: 13px;')
     layout.addWidget(self._cover)
 
     # ── 右侧：信息 + 翻页按钮 ───────────────────────────
@@ -174,24 +174,28 @@ class DetailDialog(QDialog):
     self.setWindowTitle(f'图书信息 - {book.title}')
 
     # 重置封面显示
-    self._cover.setText('无封面')
     self._cover.setPixmap(QPixmap())
-
     if book.cover_url:
+      self._cover.setText('加载中...')
       self._start_cover_download(book.cover_url, isbn, book.douban_url)
+    else:
+      self._cover.setText('无封面')
 
-    # 用 HTML 渲染图书信息
+    # 用 HTML 渲染图书信息（颜色跟随主题 palette）
+    pal = self.palette()
+    muted = pal.color(QPalette.ColorRole.PlaceholderText).name()
+    accent = '#e8922a'
     info_html = f'''<div style="padding: 8px;">
 <div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{book.title}</div>
 <table style="line-height: 1.8;">
-<tr><td style="color:#7a7a80; padding-right:16px;">作者</td><td>{book.author}</td></tr>
-<tr><td style="color:#7a7a80;">出版</td><td>{book.publisher}</td></tr>
-<tr><td style="color:#7a7a80;">价格</td><td>{book.price}</td></tr>
-<tr><td style="color:#7a7a80;">出版年</td><td>{book.pubdate}</td></tr>
-<tr><td style="color:#7a7a80;">ISBN</td><td>{book.isbn}</td></tr>
-<tr><td style="color:#7a7a80;">评分</td><td>{book.rating} 分 / {book.raters} 人</td></tr>
-<tr><td style="color:#7a7a80;">推荐</td><td>{book.recommend}</td></tr>
-<tr><td style="color:#7a7a80;">链接</td><td><a style="color:#e8922a; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
+<tr><td style="color:{muted}; padding-right:16px;">作者</td><td>{book.author}</td></tr>
+<tr><td style="color:{muted};">出版</td><td>{book.publisher}</td></tr>
+<tr><td style="color:{muted};">价格</td><td>{book.price}</td></tr>
+<tr><td style="color:{muted};">出版年</td><td>{book.pubdate}</td></tr>
+<tr><td style="color:{muted};">ISBN</td><td>{book.isbn}</td></tr>
+<tr><td style="color:{muted};">评分</td><td>{book.rating} 分 / {book.raters} 人</td></tr>
+<tr><td style="color:{muted};">推荐</td><td>{book.recommend}</td></tr>
+<tr><td style="color:{muted};">链接</td><td><a style="color:{accent}; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
 </table></div>'''
     self._info.setHtml(info_html)
 

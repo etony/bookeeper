@@ -20,9 +20,11 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTabWidget
 
 from database import BookRepo
 
-# 统计面板暗色配色——和主窗口的暗色主题保持一致
+# 统计面板配色——和主窗口主题保持一致
 DARK_BG = '#1c1c1f'
 DARK_FG = '#e0e0e4'
+LIGHT_BG = '#f8f6f2'
+LIGHT_FG = '#2c3e50'
 ACCENT = '#e8922a'
 
 
@@ -70,7 +72,7 @@ class StatsDialog(QDialog):
       ax.spines['left'].set_color('#323238')
     else:
       ax.set_facecolor('#f0eee8')
-      ax.tick_params(colors='#2c3e50', labelsize=10)
+      ax.tick_params(colors=LIGHT_FG, labelsize=10)
       ax.spines['bottom'].set_color('#d8d6d0')
       ax.spines['left'].set_color('#d8d6d0')
     ax.spines['top'].set_visible(False)
@@ -83,8 +85,8 @@ class StatsDialog(QDialog):
     展示各状态的图书数量占比，
     如果数据为空则显示"暂无数据"。
     """
-    bg = DARK_BG if self._dark_mode else '#f8f6f2'
-    fg = DARK_FG if self._dark_mode else '#2c3e50'
+    bg = DARK_BG if self._dark_mode else LIGHT_BG
+    fg = DARK_FG if self._dark_mode else LIGHT_FG
     fig = Figure(figsize=(7, 4.5), facecolor=bg)
     ax = fig.add_subplot(111)
     self._style_ax(ax)
@@ -114,8 +116,8 @@ class StatsDialog(QDialog):
     从多到少排序，逆序显示（顶部是第一名）。
     每根柱子末尾显示数量。
     """
-    bg = DARK_BG if self._dark_mode else '#f8f6f2'
-    fg = DARK_FG if self._dark_mode else '#2c3e50'
+    bg = DARK_BG if self._dark_mode else LIGHT_BG
+    fg = DARK_FG if self._dark_mode else LIGHT_FG
     fig = Figure(figsize=(7, 4.5), facecolor=bg)
     ax = fig.add_subplot(111)
     self._style_ax(ax)
@@ -144,8 +146,8 @@ class StatsDialog(QDialog):
     0-6（低分）、6-7（一般）、7-8（良好）、8-9（优秀）、9-10（神作）
     每根柱子顶部显示数量。
     """
-    bg = DARK_BG if self._dark_mode else '#f8f6f2'
-    fg = DARK_FG if self._dark_mode else '#2c3e50'
+    bg = DARK_BG if self._dark_mode else LIGHT_BG
+    fg = DARK_FG if self._dark_mode else LIGHT_FG
     fig = Figure(figsize=(7, 4.5), facecolor=bg)
     ax = fig.add_subplot(111)
     self._style_ax(ax)

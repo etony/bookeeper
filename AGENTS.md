@@ -4,7 +4,7 @@
 
 ```bash
 pip install -r requirements.txt
-python main.py          # 桌面 GUI
+python main.py          # 桌面 GUI（带控制台）
 python main.pyw         # 无控制台窗口（Windows）
 ```
 
@@ -15,6 +15,7 @@ python main.pyw         # 无控制台窗口（Windows）
 - `config.py` 全局配置，首次运行自动生成 `config.json`（含豆瓣 API key，已 gitignore）
 - `settings.ini`（QSettings）存储窗口状态，已 gitignore
 - `backups/` 保留最近 30 份备份，每 5 分钟自动备份，已 gitignore
+- `covers/` 封面本地缓存，按 ISBN 命名，已 gitignore
 
 ## 关键约定
 
@@ -31,3 +32,6 @@ python main.pyw         # 无控制台窗口（Windows）
 - 表格模型基于 `pandas.DataFrame`，更新后用 `emitDataChanged()` 刷新
 - 豆瓣搜索需要两个不同的 API key（查 ISBN 用 one，关键词搜索用另一个）
 - 导出 CSV 列比界面列多（含封面 URL、豆瓣链接等扩展字段）
+- uvicorn 启动时必须 `log_config=None`，否则 pythonw 下 stdout 为 None 导致 formatter 配置失败
+- Web 服务通过 `BookWebServer.start()` 在独立线程运行 uvicorn，`stop()` 设置 `should_exit=True` 优雅关闭
+- 单实例检测用 `QSharedMemory`，重复启动会弹窗提示并退出

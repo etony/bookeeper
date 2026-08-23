@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import re
 
 import uvicorn
 import requests
@@ -55,6 +56,8 @@ tr:hover td{background:rgba(232,146,42,.06)}
 .chart-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .chart-bar .label{flex:0 0 100px;font-size:12px;color:var(--text2);text-align:right}
 .chart-bar .fill{background:var(--accent);color:#1c1c1f;font-size:11px;font-weight:600;padding:3px 8px;border-radius:3px;min-width:20px;text-align:right}
+.btn-link{background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:13px;font-weight:500}
+.btn-link:hover{color:var(--accent-hover);text-decoration:underline}
 form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:500px}
 form label{display:block;font-size:12px;color:var(--text2);margin-top:12px;margin-bottom:4px}
 form input,form select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:14px;outline:none}
@@ -82,11 +85,18 @@ def esc(val) -> str:
   """
   HTML 转义，防止 XSS 攻击。
 
-  将 & < > " 等特殊字符转为 HTML 实体，
+  将 & < > " ' 等特殊字符转为 HTML 实体，
   确保用户输入的内容不会破坏页面结构。
   """
   s = str(val) if val is not None else ''
-  return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+  return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#x27;')
+
+
+def _valid_date(val: str) -> str:
+  """校验日期格式 yyyy-MM-dd，无效则返回空串"""
+  if val and re.fullmatch(r'\d{4}-\d{2}-\d{2}', val.strip()):
+    return val.strip()
+  return ''
 
 
 class BookWebServer:
@@ -136,7 +146,7 @@ class BookWebServer:
 <td>{esc(b.title)}</td><td>{esc(b.author)}</td><td>{esc(b.publisher)}</td>
 <td>{esc(b.price)}</td><td>{esc(b.rating)}</td><td>{esc(b.status)}</td>
 <td>{esc(b.shelf)}</td>
-<td><a href="/edit/{esc(b.isbn)}">编辑</a> <a href="/delete/{esc(b.isbn)}" onclick="return confirm('确定删除？')">删除</a></td>
+<td><a href="/edit/{esc(b.isbn)}">编辑</a> <form method="post" action="/delete/{esc(b.isbn)}" style="display:inline" onsubmit="return confirm('确定删除？')"><button type="submit" class="btn-link">删除</button></form></td>
 </tr>'''
       pages_html = ''
       for p in range(1, total_pages + 1):
@@ -161,7 +171,8 @@ class BookWebServer:
       支持 ?isbn=xxx&fetch=1 参数自动获取豆瓣数据，
       填入表单各字段，用户确认后提交保存。
       """
-      vals = dict(isbn='', title='', author='', publisher='', price='', rating='0', status='默认', shelf='')
+      vals = dict(isbn='', title='', author='', publisher='', price='', rating='0', status='默认', shelf='',
+                  start_date='', end_date='')
       if fetch == '1' and isbn:
         from services.douban import DoubanService
         api_book = DoubanService().get_book_by_isbn(isbn)
@@ -190,16 +201,21 @@ class BookWebServer:
 <label>评分</label><input type="text" name="rating" value="{esc(vals['rating'])}">
 <label>状态</label><select name="status">{opts}</select>
 <label>书柜</label><input type="text" name="shelf" value="{esc(vals['shelf'])}">
+<label>购书日期</label><input type="date" name="start_date" value="{esc(vals['start_date'])}">
+<label>已读日期</label><input type="date" name="end_date" value="{esc(vals['end_date'])}">
 <div><button class="btn btn-primary" type="submit">保存</button></div>
 </form>''')
 
     @app.post('/add')
-    def add_submit(isbn: str = Form(...), title: str = '', author: str = '', publisher: str = '',
-                   price: str = '', rating: str = '0', status: str = '默认', shelf: str = ''):
+    def add_submit(isbn: str = Form(...), title: str = Form(''), author: str = Form(''),
+                   publisher: str = Form(''), price: str = Form(''), rating: str = Form('0'),
+                   status: str = Form('默认'), shelf: str = Form(''),
+                   start_date: str = Form(''), end_date: str = Form('')):
       """提交添加图书表单"""
       from models.book import Book
       book = Book(isbn=isbn, title=title, author=author, publisher=publisher,
-                  price=price, rating=rating, status=status, shelf=shelf)
+                  price=price, rating=rating, status=status, shelf=shelf,
+                  start_date=_valid_date(start_date), end_date=_valid_date(end_date))
       self._repo.upsert(book)
       return RedirectResponse(url='/', status_code=302)
 
@@ -252,12 +268,17 @@ class BookWebServer:
 <label>评分</label><input type="text" name="rating" value="{esc(book.rating)}">
 <label>状态</label><select name="status">{opts}</select>
 <label>书柜</label><input type="text" name="shelf" value="{esc(book.shelf)}">
+<label>购书日期</label><input type="date" name="start_date" value="{esc(book.start_date or '')}">
+<label>已读日期</label><input type="date" name="end_date" value="{esc(book.end_date or '')}">
 <div><button class="btn btn-primary" type="submit">保存</button></div>
 </form>''')
 
     @app.post('/edit/{isbn}')
-    def edit_submit(isbn: str, title: str = '', author: str = '', publisher: str = '',
-                    price: str = '', rating: str = '0', status: str = '默认', shelf: str = ''):
+    def edit_submit(isbn: str, title: str = Form(''), author: str = Form(''),
+                    publisher: str = Form(''), price: str = Form(''),
+                    rating: str = Form('0'), status: str = Form('默认'),
+                    shelf: str = Form(''), start_date: str = Form(''),
+                    end_date: str = Form('')):
       """提交编辑图书表单"""
       book = self._repo.get_by_isbn(isbn)
       if not book:
@@ -269,10 +290,12 @@ class BookWebServer:
       book.rating = rating
       book.status = status
       book.shelf = shelf
+      book.start_date = _valid_date(start_date)
+      book.end_date = _valid_date(end_date)
       self._repo.upsert(book)
       return RedirectResponse(url='/', status_code=302)
 
-    @app.get('/delete/{isbn}')
+    @app.post('/delete/{isbn}')
     def delete_book(isbn: str):
       """删除图书"""
       self._repo.delete(isbn)
@@ -284,20 +307,16 @@ class BookWebServer:
       封面代理。
 
       豆瓣图片有防盗链，直接在 HTML 中引用豆瓣 URL 会 403。
-      此路由充当代理：用合适的 Referer 下载图片后返回给浏览器。
+      此路由充当代理：从本地缓存读取，未命中则下载并缓存。
       """
       book = self._repo.get_by_isbn(isbn)
       if not book or not book.cover_url:
         raise HTTPException(status_code=404)
-      try:
-        resp = requests.get(book.cover_url, headers={
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://book.douban.com/',
-        }, timeout=10)
-        resp.raise_for_status()
-        return Response(content=resp.content, media_type=resp.headers.get('Content-Type', 'image/jpeg'))
-      except requests.RequestException:
+      from services.covers import get_cover
+      data, media_type = get_cover(isbn, book.cover_url)
+      if not data:
         raise HTTPException(status_code=502)
+      return Response(content=data, media_type=media_type)
 
     @app.get('/book/{isbn}', response_class=HTMLResponse)
     def book_detail(isbn: str):

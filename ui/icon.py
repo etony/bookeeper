@@ -10,6 +10,7 @@ Windows 任务栏图标通过 Win32 API (WM_SETICON) 设置，
 """
 
 import os
+import math
 import struct
 import tempfile
 import ctypes
@@ -103,6 +104,63 @@ def export_ico(path: str):
     # PNG 数据
     for png_data in png_data_list:
       f.write(png_data)
+
+
+def make_theme_icon(dark: bool) -> QIcon:
+  """生成主题切换图标：暗色模式显示太阳，亮色模式显示月亮"""
+  size = 20
+  pm = QPixmap(size, size)
+  pm.setDevicePixelRatio(1.0)
+  pm.fill(Qt.GlobalColor.transparent)
+  painter = QPainter(pm)
+  painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+  painter.setPen(Qt.PenStyle.NoPen)
+
+  if dark:
+    # 太阳：亮橙色圆 + 放射线
+    painter.setBrush(QColor('#f0a030'))
+    painter.drawEllipse(5, 5, 10, 10)
+    for angle in range(0, 360, 45):
+      rad = math.radians(angle)
+      x1 = 10 + 8 * math.cos(rad)
+      y1 = 10 + 8 * math.sin(rad)
+      painter.drawEllipse(int(x1) - 1, int(y1) - 1, 2, 2)
+  else:
+    # 月亮：深金色弯月（亮色背景下对比明显）
+    painter.setBrush(QColor('#b8940a'))
+    painter.drawEllipse(4, 3, 11, 11)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+    painter.drawEllipse(8, 2, 10, 10)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
+  painter.end()
+  return QIcon(pm)
+
+
+def make_about_icon() -> QIcon:
+  """生成关于图标：圆圈内带 i 字母"""
+  size = 20
+  pm = QPixmap(size, size)
+  pm.setDevicePixelRatio(1.0)
+  pm.fill(Qt.GlobalColor.transparent)
+  painter = QPainter(pm)
+  painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+  # 外圈
+  painter.setPen(QColor('#5a5a62'))
+  painter.setBrush(Qt.BrushStyle.NoBrush)
+  painter.drawEllipse(1, 1, 18, 18)
+
+  # i 字母
+  font = QFont('Arial')
+  font.setPixelSize(12)
+  font.setBold(True)
+  painter.setFont(font)
+  painter.setPen(QColor('#5a5a62'))
+  painter.drawText(QRectF(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, 'i')
+
+  painter.end()
+  return QIcon(pm)
 
 
 def set_app_user_model_id():

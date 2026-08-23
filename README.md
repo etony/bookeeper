@@ -11,9 +11,11 @@
 - **CSV 导入/导出** — UTF-8 BOM 编码，兼容旧版列名映射
 - **统计面板** — 阅读状态饼图、出版社 TOP10、评分分布柱状图（matplotlib 深色风格）
 - **暗色/亮色主题** — 暖橙强调色 `#e8922a`，一键切换，QSettings 持久化
-- **局域网 Web 服务** — FastAPI 完整 CRUD、搜索、分页、统计、封面代理，零 JS
+- **本机 Web 服务** — FastAPI 完整 CRUD、搜索、分页、统计、封面代理，零 JS
 - **ISBN 校验** — 支持 ISBN-10/ISBN-13 校验位验证
 - **自动备份** — 每 5 分钟备份至 `backups/`，保留最近 30 份
+- **备份恢复** — 一键从备份恢复，恢复前自动保存当前数据
+- **封面缓存** — 下载的封面本地缓存至 `covers/`，避免重复下载
 - **推荐度算法** — `(评分 - 2.5) × ln(评价人数 + 1)`
 - **快捷键** — Ctrl+S 保存 / Ctrl+F 搜索 / Ctrl+R 重置 / Ctrl+D 豆瓣搜索
 
@@ -28,15 +30,15 @@ pip install -r requirements.txt
 ## 使用
 
 ```bash
-cd new
-python main.py
+python main.py          # 桌面 GUI（带控制台）
+python main.pyw         # 无控制台窗口（Windows）
 ```
 
 首次运行自动生成 `config.json`，内含豆瓣 API key。
 
 ### Web 服务
 
-桌面界面点击 **🌐 Web 服务** 启动，访问 `http://127.0.0.1:8899`，支持完整的图书管理操作。
+桌面界面点击 **🌐 Web 服务** 启动，访问 `http://127.0.0.1:8899`（仅本机），支持完整的图书管理操作。
 
 ## 配置
 
@@ -54,34 +56,37 @@ python main.py
 ## 项目结构
 
 ```
-├── new/                        # 新版（推荐）
-│   ├── main.py                 # 应用入口
-│   ├── config.py               # 全局配置（API key、列名、端口等）
-│   ├── config.json             # 用户配置（API key）
-│   ├── utils.py                # ISBN 校验工具
-│   ├── database.py             # 数据访问层（SQLite, Repository 模式）
-│   ├── requirements.txt        # Python 依赖清单
-│   ├── models/
-│   │   ├── book.py             # Book dataclass（领域模型）
-│   │   └── table_model.py      # QAbstractTableModel（pandas 后端）
-│   ├── services/
-│   │   ├── douban.py           # 豆瓣 API 封装
-│   │   ├── data.py             # CSV 加载/保存
-│   │   └── backup.py           # 定时备份服务
-│   ├── ui/
-│   │   ├── theme.py            # 暗色/亮色 QSS 主题（暖橙强调色）
-│   │   ├── main_window.py      # 主窗口（Mediator 协调者）
-│   │   ├── detail_dialog.py    # 图书详情（封面 + 翻页）
-│   │   ├── search_dialog.py    # 豆瓣搜索对话框
-│   │   └── stats_dialog.py     # 统计面板（matplotlib）
-│   ├── web/
-│   │   └── server.py           # FastAPI Web 服务
-│   └── workers/
-│       └── workers.py          # 后台工作线程
+├── main.py                 # 应用入口（带控制台）
+├── main.pyw                # 应用入口（无控制台，Windows）
+├── config.py               # 全局配置（API key、列名、端口等）
+├── config.json             # 用户配置（API key，已 gitignore）
+├── utils.py                # ISBN 校验工具
+├── database.py             # 数据访问层（SQLite, Repository 模式）
+├── requirements.txt        # Python 依赖清单
+├── models/
+│   ├── book.py             # Book dataclass（领域模型）
+│   └── table_model.py      # QAbstractTableModel（pandas 后端）
+├── services/
+│   ├── __init__.py         # 全局 BookRepo 单例
+│   ├── douban.py           # 豆瓣 API 封装
+│   ├── data.py             # CSV 加载/保存
+│   ├── backup.py           # 定时备份服务
+│   └── covers.py           # 封面本地缓存
+├── ui/
+│   ├── theme.py            # 暗色/亮色 QSS 主题（暖橙强调色）
+│   ├── main_window.py      # 主窗口（Mediator 协调者）
+│   ├── detail_dialog.py    # 图书详情（封面 + 翻页）
+│   ├── search_dialog.py    # 豆瓣搜索对话框
+│   ├── stats_dialog.py     # 统计面板（matplotlib）
+│   └── icon.py             # 应用图标绘制（QPainter 动态绘制）
+├── web/
+│   └── server.py           # FastAPI Web 服务（内嵌 uvicorn）
+├── books.db                # SQLite 数据库（已 gitignore）
+├── backups/                # 自动备份目录（已 gitignore）
+├── covers/                 # 封面本地缓存（已 gitignore）
 ├── README.md
 ├── LICENSE
-├── .gitignore
-└── requirements.txt            # 依赖清单（与 new/ 一致）
+└── .gitignore
 ```
 
 ## 架构
@@ -107,8 +112,8 @@ python main.py
 ├──────────────────────────────────────┤
 │        Web 层 (FastAPI)              │
 │    BookWebServer (内嵌 uvicorn)      │
-│    路由: / /add /edit /delete       │
-│    /book /cover /stats              │
+│    路由: / /add /edit /delete        │
+│    /book /cover /stats               │
 └──────────────────────────────────────┘
 ```
 

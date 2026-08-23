@@ -267,32 +267,46 @@ class BookRepo:
 
   # ── CSV 导入导出 ──────────────────────────────────────
 
-  def import_df(self, df) -> int:
+  def import_df(self, df, progress_callback=None) -> int:
     """
     从 pandas DataFrame 逐行导入。
 
-    参数 df 的列名需要和 Config.TABLE_COLUMNS 一致，
-    或者经过 services.data.load_csv 的列名映射。
+    使用单个数据库连接完成所有 upsert，大幅提升导入性能。
+    progress_callback(current, total) 每 100 行回调一次。
 
     返回成功导入的条数（跳过了 ISBN 为空的行）。
     """
     imported = 0
-    for _, row in df.iterrows():
-      b = Book(
-        isbn=str(row.get('ISBN', '')),
-        title=str(row.get('书名', '')),
-        author=str(row.get('作者', '')),
-        publisher=str(row.get('出版', '')),
-        price=str(row.get('价格', '')),
-        rating=str(row.get('评分', '0')),
-        raters=str(row.get('人数', '0')),
-        status=str(row.get('状态', '默认')),
-        shelf=str(row.get('书柜', '未设置')),
-        start_date=str(row.get('购书日期', '')),
-        end_date=str(row.get('已读日期', '')),
-      )
-      if b.isbn and self.upsert(b):
+    total = len(df)
+    with self._conn() as conn:
+      for i, (_, row) in enumerate(df.iterrows()):
+        isbn = str(row.get('ISBN', ''))
+        if not isbn:
+          continue
+        data = {
+          'isbn': isbn,
+          'title': str(row.get('书名', '')),
+          'author': str(row.get('作者', '')),
+          'publisher': str(row.get('出版', '')),
+          'price': str(row.get('价格', '')),
+          'rating': str(row.get('评分', '0')),
+          'raters': str(row.get('人数', '0')),
+          'status': str(row.get('状态', '默认')),
+          'shelf': str(row.get('书柜', '未设置')),
+          'start_date': str(row.get('购书日期', '')),
+          'end_date': str(row.get('已读日期', '')),
+        }
+        cols = ', '.join(data.keys())
+        placeholders = ', '.join('?' for _ in data)
+        updates = ', '.join(f'{k}=excluded.{k}' for k in data)
+        sql = f'''
+          INSERT INTO books ({cols}) VALUES ({placeholders})
+          ON CONFLICT(isbn) DO UPDATE SET {updates}, updated_at=CURRENT_TIMESTAMP
+        '''
+        conn.execute(sql, list(data.values()))
         imported += 1
+        if progress_callback and (i % 100 == 0 or i == total - 1):
+          progress_callback(i + 1, total)
     return imported
 
   def export_df(self):

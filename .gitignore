@@ -2,6 +2,7 @@ books.db
 config.json
 settings.ini
 backups/
+covers/
 __pycache__/
 *.pyc
 .DS_Store

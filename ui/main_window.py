@@ -13,12 +13,13 @@ import base64
 import webbrowser
 
 import pandas as pd
-from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, pyqtSignal
-from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
+from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, QByteArray, pyqtSignal
+from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence, QPalette
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QTableView,
   QDateEdit, QFileDialog, QMessageBox, QMenu, QHeaderView, QStatusBar, QProgressDialog,
+  QAbstractSpinBox, QDialog, QListWidget, QDialogButtonBox, QFrame,
 )
 
 from config import Config
@@ -105,11 +106,20 @@ class MainWindow(QMainWindow):
     self.setStatusBar(sb)
 
   def _make_toolbar(self):
-    """顶部工具栏：CSV 导入/导出、统计、豆瓣搜索、Web 服务、主题切换"""
+    """顶部工具栏：分组排列，用分隔线区分功能区域"""
     w = QWidget()
     row = QHBoxLayout(w)
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(4)
+
+    def sep():
+      """添加垂直分隔线，颜色跟随主题"""
+      line = QFrame()
+      line.setFrameShape(QFrame.Shape.VLine)
+      line.setFrameShadow(QFrame.Shadow.Sunken)
+      c = self.palette().color(QPalette.ColorRole.Mid).name()
+      line.setStyleSheet(f'color: {c};')
+      row.addWidget(line)
 
     self._btn_load = QPushButton('📂 加载 CSV')
     self._btn_load.setToolTip('从 CSV 导入图书数据')
@@ -120,18 +130,41 @@ class MainWindow(QMainWindow):
     self._btn_search_douban.setToolTip('从豆瓣搜索图书并添加 (Ctrl+D)')
     self._btn_web = QPushButton('🌐 Web 服务')
     self._btn_web.setToolTip('启动/停止内嵌 Web 服务')
-    self._btn_theme = QPushButton('☀️')
-    self._btn_theme.setFixedSize(34, 32)
+    self._btn_restore = QPushButton('⏪ 恢复')
+    self._btn_restore.setToolTip('从备份恢复数据库')
+    from ui.icon import make_theme_icon, make_about_icon
+    self._btn_theme = QPushButton(make_theme_icon(self._dark_mode), '')
+    self._btn_theme.setFixedSize(38, 32)
     self._btn_theme.setToolTip('切换亮色/暗色主题')
+    self._btn_about = QPushButton(make_about_icon(), '')
+    self._btn_about.setFixedSize(38, 32)
+    self._btn_about.setToolTip('关于 Bookeeper')
 
-    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web, self._btn_theme):
+    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web, self._btn_restore):
       btn.setFixedHeight(32)
-      row.addWidget(btn)
-    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web):
       btn.setMinimumWidth(85)
+    for btn in (self._btn_theme, self._btn_about):
+      btn.setFixedHeight(32)
+
+    # 数据操作组
+    row.addWidget(self._btn_load)
+    row.addWidget(self._btn_save)
+    sep()
+    # 搜索分析组
+    row.addWidget(self._btn_search_douban)
+    row.addWidget(self._btn_stats)
+    sep()
+    # 服务组
+    row.addWidget(self._btn_web)
+    row.addWidget(self._btn_restore)
+    sep()
+    # 设置组
+    row.addWidget(self._btn_theme)
+    row.addWidget(self._btn_about)
 
     self._file_label = QLabel('')
-    self._file_label.setStyleSheet('color: #7a7a80; font-size: 12px;')
+    c = self.palette().color(QPalette.ColorRole.PlaceholderText).name()
+    self._file_label.setStyleSheet(f'color: {c}; font-size: 12px;')
     row.addWidget(self._file_label, stretch=1)
     return w
 
@@ -157,9 +190,11 @@ class MainWindow(QMainWindow):
     self._isbn_input.setPlaceholderText('输入 ISBN（回车即查询豆瓣）')
     r0.addWidget(self._isbn_input, stretch=1)
     self._btn_fetch = QPushButton('🌐 获取信息')
+    self._btn_new = QPushButton('➕ 新增')
+    self._btn_new.setToolTip('清空表单，手动添加新图书')
     self._btn_update = QPushButton('💾 更新记录')
     self._btn_clear = QPushButton('✕ 清空')
-    for btn in (self._btn_fetch, self._btn_update, self._btn_clear):
+    for btn in (self._btn_fetch, self._btn_new, self._btn_update, self._btn_clear):
       btn.setFixedHeight(30)
       r0.addWidget(btn)
     layout.addLayout(r0)
@@ -180,9 +215,10 @@ class MainWindow(QMainWindow):
     for edit in (self._start_date, self._end_date):
       edit.setDisplayFormat('yyyy/M/d')
       edit.setCalendarPopup(False)
-      edit.setSpecialValueText(' ')
-      edit.setDate(QDate(1900, 1, 1))
-      edit.setFixedWidth(100)
+      edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+      edit.setFixedWidth(150)
+    self._start_date.setDate(QDate(1900, 1, 1))
+    self._end_date.setDate(QDate.currentDate())
     grid = QGridLayout()
     grid.setSpacing(4)
     grid.addWidget(QLabel('书名'), 0, 0); grid.addWidget(self._title_input, 0, 1)
@@ -270,6 +306,7 @@ class MainWindow(QMainWindow):
     """绑定所有 UI 控件的信号-槽连接"""
     self._isbn_input.returnPressed.connect(self._fetch_book)
     self._btn_fetch.clicked.connect(self._fetch_book)
+    self._btn_new.clicked.connect(self._new_book)
     self._btn_update.clicked.connect(self._update_book)
     self._btn_clear.clicked.connect(self._clear_form)
     self._btn_load.clicked.connect(self._load_csv)
@@ -280,6 +317,8 @@ class MainWindow(QMainWindow):
     self._btn_reset.clicked.connect(self._reset_search)
     self._btn_search_douban.clicked.connect(self._open_search_dialog)
     self._btn_web.clicked.connect(self._toggle_web)
+    self._btn_restore.clicked.connect(self._restore_backup)
+    self._btn_about.clicked.connect(self._show_about)
     self._table.clicked.connect(self._on_row_clicked)
     self._table.doubleClicked.connect(self._on_double_clicked)
     self._table.customContextMenuRequested.connect(self._show_context_menu)
@@ -315,7 +354,16 @@ class MainWindow(QMainWindow):
     QTimer.singleShot(0, self._backup_svc.backup)
 
   def closeEvent(self, event):
-    """关闭窗口前强制备份一次"""
+    """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 强制备份"""
+    if hasattr(self, '_web_worker') and self._web_worker:
+      self._web_worker.stop()
+    if hasattr(self, '_web_thread') and self._web_thread:
+      self._web_thread.quit()
+      self._web_thread.wait(3000)
+    s = self._settings()
+    geo = self.saveGeometry().data()
+    if geo:
+      s.setValue('windowGeometry', base64.b64encode(geo).decode('ascii'))
     if self._model.rowCount():
       self._backup_svc.backup()
     super().closeEvent(event)
@@ -355,6 +403,7 @@ class MainWindow(QMainWindow):
       self.statusBar().showMessage('查询失败')
       return
 
+    self._merge_user_fields(book)
     self._fill_form(book)
     self._repo.upsert(book)
     self._mark_dirty()
@@ -370,7 +419,9 @@ class MainWindow(QMainWindow):
     self._price_input.setText(book.price)
     self._rating_input.setText(f'{book.rating} / {book.raters}')
     idx = Config.STATUSES.index(book.status) if book.status in Config.STATUSES else 0
+    self._status_combo.blockSignals(True)
     self._status_combo.setCurrentIndex(idx)
+    self._status_combo.blockSignals(False)
     self._shelf_input.setText(book.shelf)
     self._set_date(self._start_date, book.start_date)
     self._set_date(self._end_date, book.end_date)
@@ -424,6 +475,11 @@ class MainWindow(QMainWindow):
     self._end_date.setDate(QDate(1900, 1, 1))
     self._isbn_input.setFocus()
 
+  def _new_book(self):
+    """清空表单，聚焦到书名输入框，方便手动添加新图书"""
+    self._clear_form()
+    self._title_input.setFocus()
+
   def _on_row_clicked(self, index):
     """点击表格行时，将选中行数据填充到表单"""
     def val(col):
@@ -448,25 +504,37 @@ class MainWindow(QMainWindow):
   def _on_double_clicked(self, index):
     """双击打开图书详情对话框"""
     clicked_isbn = str(index.sibling(index.row(), 0).data() or '')
-    if not clicked_isbn:
-      return
+    if clicked_isbn:
+      self._open_detail(clicked_isbn)
+
+  def _open_detail(self, isbn: str):
+    """打开指定 ISBN 的详情对话框"""
     isbn_list = []
     clicked_idx = 0
     for r in range(self._model.rowCount()):
-      isbn = str(self._model.index(r, 0).data() or '')
-      if isbn:
-        isbn_list.append(isbn)
-        if isbn == clicked_isbn:
+      row_isbn = str(self._model.index(r, 0).data() or '')
+      if row_isbn:
+        isbn_list.append(row_isbn)
+        if row_isbn == isbn:
           clicked_idx = len(isbn_list) - 1
     from ui.detail_dialog import DetailDialog
     dlg = DetailDialog(isbn_list=isbn_list, index=clicked_idx, parent=self)
     dlg.exec()
 
+  def _load_by_isbn(self, isbn: str):
+    """根据 ISBN 从数据库加载图书到表单"""
+    book = self._repo.get_by_isbn(isbn)
+    if book:
+      self._fill_form(book)
+
   def _on_status_changed(self, text: str):
-    """状态设为'已读'时自动填入当天日期，切回非'已读'时清空"""
-    if text == '已读' and self._end_date.date() <= QDate(1900, 1, 1):
-      self._end_date.setDate(QDate.currentDate())
-    elif text != '已读':
+    """状态设为'已读'时自动填入日期，切回非'已读'时重置"""
+    if text == '已读':
+      if self._end_date.date() <= QDate(1900, 1, 1):
+        self._end_date.setDate(QDate.currentDate())
+      if self._start_date.date() <= QDate(1900, 1, 1):
+        self._start_date.setDate(QDate.currentDate())
+    else:
       self._end_date.setDate(QDate(1900, 1, 1))
 
   def _show_context_menu(self, pos):
@@ -486,10 +554,25 @@ class MainWindow(QMainWindow):
     if not isbn_list:
       return
     menu = QMenu(self)
+    view_action = QAction(QIcon(), '📖 查看详情', self)
+    edit_action = QAction(QIcon(), '✏️ 编辑', self)
     delete_action = QAction(QIcon(), '🗑 删除选中', self)
+    menu.addAction(view_action)
+    menu.addAction(edit_action)
+    menu.addSeparator()
     menu.addAction(delete_action)
     action = menu.exec(self._table.mapToGlobal(pos))
-    if action == delete_action:
+    if action == view_action and isbn_list:
+      self._open_detail(isbn_list[0])
+    elif action == edit_action and isbn_list:
+      self._load_by_isbn(isbn_list[0])
+    elif action == delete_action:
+      ret = QMessageBox.question(
+        self, '确认删除',
+        f'确定删除选中的 {len(isbn_list)} 本图书？此操作不可撤销。',
+      )
+      if ret != QMessageBox.StandardButton.Yes:
+        return
       for isbn in isbn_list:
         self._repo.delete(isbn)
       self._mark_dirty()
@@ -516,7 +599,6 @@ class MainWindow(QMainWindow):
     """重置搜索条件，显示全部图书"""
     self._search_input.clear()
     self._search_status.setCurrentIndex(0)
-    self._clear_form()
     self._load_data()
 
   def _open_search_dialog(self):
@@ -531,6 +613,7 @@ class MainWindow(QMainWindow):
 
   def _on_search_result(self, book: Book):
     """豆瓣搜索结果回调：填入表单并存入数据库"""
+    self._merge_user_fields(book)
     self._fill_form(book)
     self._repo.upsert(book)
     self._mark_dirty()
@@ -543,30 +626,58 @@ class MainWindow(QMainWindow):
 
   def _load_csv(self):
     """
-    加载 CSV 文件并导入到数据库。
+    加载 CSV 文件并异步导入到数据库。
 
-    用 QProgressDialog 显示进度，
-    避免大文件导入时用户以为程序卡死了。
+    CSV 读取在主线程完成（快速），
+    数据库写入移至后台线程，避免大文件时 UI 冻结。
     """
     path, _ = QFileDialog.getOpenFileName(self, '加载 CSV', '.', 'CSV 文件 (*.csv)')
     if not path:
       return
-    progress = QProgressDialog('正在导入 CSV...', '取消', 0, 0, self)
-    progress.setWindowTitle('导入中')
-    progress.setMinimumDuration(0)
-    progress.show()
     try:
       from services.data import load_csv
       df = load_csv(path)
-      count = self._repo.import_df(df)
-      progress.close()
-      self._mark_dirty()
-      self._load_data()
-      self._file_label.setText(os.path.basename(path))
-      QMessageBox.information(self, '提示', f'导入完成，共处理 {count} 条记录')
     except Exception as e:
-      progress.close()
-      QMessageBox.warning(self, '错误', f'导入失败: {e}')
+      QMessageBox.warning(self, '错误', f'读取 CSV 失败: {e}')
+      return
+
+    self._btn_load.setEnabled(False)
+    self._import_progress = QProgressDialog('正在导入 CSV...', None, 0, len(df), self)
+    self._import_progress.setWindowTitle('导入中')
+    self._import_progress.setMinimumDuration(0)
+    self._import_progress.show()
+
+    self._import_thread = QThread()
+    self._import_worker = _ImportWorker(self._repo, df)
+    self._import_worker.moveToThread(self._import_thread)
+    self._import_thread.started.connect(self._import_worker.run)
+    self._import_worker.progress.connect(self._on_import_progress)
+    self._import_worker.finished.connect(self._on_import_finished)
+    self._import_worker.failed.connect(self._on_import_failed)
+    self._import_thread.start()
+
+  def _on_import_progress(self, current, total):
+    if self._import_progress and not self._import_progress.wasCanceled():
+      self._import_progress.setValue(current)
+
+  def _on_import_finished(self, count):
+    if self._import_progress:
+      self._import_progress.close()
+    self._import_thread.quit()
+    self._import_thread.wait(3000)
+    self._btn_load.setEnabled(True)
+    self._mark_dirty()
+    self._load_data()
+    self._file_label.setText(f'已导入 {count} 条')
+    QMessageBox.information(self, '提示', f'导入完成，共处理 {count} 条记录')
+
+  def _on_import_failed(self, msg):
+    if self._import_progress:
+      self._import_progress.close()
+    self._import_thread.quit()
+    self._import_thread.wait(3000)
+    self._btn_load.setEnabled(True)
+    QMessageBox.warning(self, '错误', f'导入失败: {msg}')
 
   def _save_csv(self):
     """导出全部数据为 CSV 文件"""
@@ -580,6 +691,47 @@ class MainWindow(QMainWindow):
       QMessageBox.information(self, '提示', '保存成功')
     except Exception as e:
       QMessageBox.warning(self, '错误', f'保存失败: {e}')
+
+  def _restore_backup(self):
+    """从备份恢复数据库"""
+    backups = self._backup_svc.list_backups()
+    if not backups:
+      QMessageBox.information(self, '提示', '暂无可用备份')
+      return
+    dlg = QDialog(self)
+    dlg.setWindowTitle('选择备份')
+    dlg.setMinimumSize(420, 360)
+    layout = QVBoxLayout(dlg)
+    layout.addWidget(QLabel('选择要恢复的备份（当前数据会自动保存一份）：'))
+    listw = QListWidget()
+    for path, name in backups:
+      item = QListWidgetItem(name)
+      item.setData(Qt.ItemDataRole.UserRole, path)
+      listw.addItem(item)
+    listw.setCurrentRow(0)
+    layout.addWidget(listw)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    buttons.accepted.connect(dlg.accept)
+    buttons.rejected.connect(dlg.reject)
+    layout.addWidget(buttons)
+    if dlg.exec() != QDialog.DialogCode.Accepted:
+      return
+    item = listw.currentItem()
+    if not item:
+      return
+    backup_path = item.data(Qt.ItemDataRole.UserRole)
+    ret = QMessageBox.question(
+      self, '确认恢复',
+      f'确定从以下备份恢复？\n\n{item.text()}\n\n当前数据会先自动备份一份。',
+    )
+    if ret != QMessageBox.StandardButton.Yes:
+      return
+    if self._backup_svc.restore(backup_path):
+      self._dirty = False
+      self._load_data()
+      QMessageBox.information(self, '提示', '恢复成功')
+    else:
+      QMessageBox.warning(self, '错误', '恢复失败')
 
   def _show_stats(self):
     """打开统计面板"""
@@ -638,9 +790,21 @@ class MainWindow(QMainWindow):
     self._dark_mode = not self._dark_mode
     qss = DARK_QSS if self._dark_mode else LIGHT_QSS
     self.setStyleSheet(qss)
-    self._btn_theme.setText('☀️' if self._dark_mode else '🌙')
+    from ui.icon import make_theme_icon
+    self._btn_theme.setIcon(make_theme_icon(self._dark_mode))
     s = self._settings()
     s.setValue('darkMode', self._dark_mode)
+
+  def _show_about(self):
+    """显示关于对话框"""
+    QMessageBox.about(
+      self, '关于 Bookeeper',
+      f'<h3>📚 Bookeeper v{Config.APP_VERSION}</h3>'
+      '<p>个人图书管理工具</p>'
+      '<p>功能：豆瓣 API 查询、ISBN 校验、CSV 导入导出、'
+      '统计面板、自动备份、局域网 Web 服务</p>'
+      '<p>技术栈：PyQt6 + FastAPI + SQLite + matplotlib</p>'
+    )
 
   def _settings(self):
     """读取 settings.ini（存储窗口状态和偏好设置）"""
@@ -648,12 +812,19 @@ class MainWindow(QMainWindow):
                      QSettings.Format.IniFormat)
 
   def _load_settings(self):
-    """恢复上次保存的主题和表头状态"""
+    """恢复上次保存的主题、表头状态和窗口几何"""
     s = self._settings()
     self._dark_mode = s.value('darkMode', 'true') == 'true'
     if not self._dark_mode:
       self.setStyleSheet(LIGHT_QSS)
-      self._btn_theme.setText('🌙')
+      from ui.icon import make_theme_icon
+      self._btn_theme.setIcon(make_theme_icon(False))
+    geo_b64 = s.value('windowGeometry', '')
+    if geo_b64:
+      try:
+        self.restoreGeometry(QByteArray(base64.b64decode(geo_b64)))
+      except Exception:
+        pass
     self._restore_header_state()
 
   def _show_header_menu(self, pos):
@@ -676,7 +847,16 @@ class MainWindow(QMainWindow):
     self._save_header_state()
 
   def _save_header_state(self):
-    """将表头状态（列顺序、宽度、可见性）保存到 settings.ini"""
+    """将表头状态（列顺序、宽度、可见性）保存到 settings.ini（防抖 500ms）"""
+    if hasattr(self, '_header_save_timer'):
+      self._header_save_timer.stop()
+    self._header_save_timer = QTimer(self)
+    self._header_save_timer.setSingleShot(True)
+    self._header_save_timer.timeout.connect(self._do_save_header_state)
+    self._header_save_timer.start(500)
+
+  def _do_save_header_state(self):
+    """实际执行表头状态保存"""
     state = self._table.horizontalHeader().saveState().data()
     s = self._settings()
     s.setValue('headerState', base64.b64encode(state).decode('ascii'))
@@ -687,7 +867,6 @@ class MainWindow(QMainWindow):
     s = self._settings()
     state_b64 = s.value('headerState', '')
     if state_b64:
-      from PyQt6.QtCore import QByteArray
       try:
         hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
       except Exception:
@@ -716,6 +895,15 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
   #  辅助
   # ══════════════════════════════════════════════
+
+  def _merge_user_fields(self, book: Book):
+    """如果 ISBN 已存在，将用户字段（状态/书柜/日期）从旧记录继承到新 book"""
+    existing = self._repo.get_by_isbn(book.isbn)
+    if existing:
+      book.status = existing.status
+      book.shelf = existing.shelf
+      book.start_date = existing.start_date
+      book.end_date = existing.end_date
 
   @staticmethod
   def _set_date(edit: QDateEdit, text: str):
@@ -774,3 +962,31 @@ class _WebWorker(QObject):
   def stop(self):
     if self._server:
       self._server.stop()
+
+
+class _ImportWorker(QObject):
+  """
+  后台导入 CSV 的工作线程。
+
+  在独立线程中执行 import_df，通过信号汇报进度和结果，
+  避免大文件导入时 UI 卡死。
+  """
+
+  progress = pyqtSignal(int, int)    # (current, total)
+  finished = pyqtSignal(int)         # 导入成功的条数
+  failed = pyqtSignal(str)           # 错误消息
+
+  def __init__(self, repo, df):
+    super().__init__()
+    self._repo = repo
+    self._df = df
+
+  def run(self):
+    try:
+      count = self._repo.import_df(self._df, progress_callback=self._on_progress)
+      self.finished.emit(count)
+    except Exception as e:
+      self.failed.emit(str(e))
+
+  def _on_progress(self, current, total):
+    self.progress.emit(current, total)
