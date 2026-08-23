@@ -1,9 +1,10 @@
 # 公共 QSS 样式（所有主题共享的基础样式）
 BASE = '''
 QWidget { font-size: 13px; }
-QLineEdit, QComboBox, QDateEdit, QTextBrowser {
-  border-radius: 5px; padding: 5px 10px;
+QLineEdit, QComboBox, QTextBrowser {
+  border-radius: 5px; padding: 5px 8px;
 }
+QDateEdit { border-radius: 5px; padding: 5px 4px; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus { border-width: 2px; }
 QPushButton {
   border-radius: 5px; padding: 6px 18px; font-weight: 500;
@@ -39,9 +40,10 @@ QCalendarWidget QToolButton { font-size: 12px; }
 # 暗色主题 QSS：深灰背景 + 橙色强调
 DARK_QSS = BASE + '''
 QWidget { background-color: #1c1c1f; color: #e0e0e4; }
-QLineEdit, QComboBox, QDateEdit, QTextBrowser {
+QLineEdit, QComboBox, QTextBrowser {
   background-color: #26262b; border: 1px solid #38383f; color: #eaeaea;
 }
+QDateEdit { background-color: #26262b; border: 1px solid #38383f; color: #eaeaea; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
   border-color: #e8922a; background-color: #202025;
 }
@@ -94,9 +96,10 @@ QToolTip {
 # 亮色主题 QSS：米白背景 + 橙色强调
 LIGHT_QSS = BASE + '''
 QWidget { background-color: #f8f6f2; color: #2c3e50; }
-QLineEdit, QComboBox, QDateEdit, QTextBrowser {
+QLineEdit, QComboBox, QTextBrowser {
   background-color: #ffffff; border: 1px solid #d8d6d0; color: #2c3e50;
 }
+QDateEdit { background-color: #ffffff; border: 1px solid #d8d6d0; color: #2c3e50; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
   border-color: #e8922a; background-color: #fefcf8;
 }

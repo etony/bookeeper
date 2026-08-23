@@ -70,7 +70,8 @@ class MainWindow(QMainWindow):
   def _setup_ui(self):
     """构建主窗口的全部控件和布局"""
     self.setWindowTitle(Config.APP_NAME)
-    self.setWindowIcon(QIcon())
+    from ui.icon import make_app_icon
+    self.setWindowIcon(make_app_icon())
     self.resize(*Config.MAIN_WINDOW_SIZE)
     self.setMinimumSize(800, 500)
 
@@ -177,11 +178,11 @@ class MainWindow(QMainWindow):
     self._start_date = QDateEdit()
     self._end_date = QDateEdit()
     for edit in (self._start_date, self._end_date):
-      edit.setDisplayFormat('yyyy-MM-dd')
-      edit.setCalendarPopup(True)
+      edit.setDisplayFormat('yyyy/M/d')
+      edit.setCalendarPopup(False)
       edit.setSpecialValueText(' ')
       edit.setDate(QDate(1900, 1, 1))
-      edit.setFixedWidth(105)
+      edit.setFixedWidth(100)
     grid = QGridLayout()
     grid.setSpacing(4)
     grid.addWidget(QLabel('书名'), 0, 0); grid.addWidget(self._title_input, 0, 1)

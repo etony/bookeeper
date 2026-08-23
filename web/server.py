@@ -420,7 +420,10 @@ class BookWebServer:
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    config = uvicorn.Config(self._app, host='127.0.0.1', port=Config.WEB_PORT, log_level='warning')
+    # log_config=None：跳过 uvicorn 自带日志配置，避免无控制台（pythonw）下
+    # sys.stdout 为 None 导致 formatter 配置失败；日志统一走应用根 logger
+    config = uvicorn.Config(self._app, host='127.0.0.1', port=Config.WEB_PORT,
+                            log_level='warning', log_config=None)
     self._server = uvicorn.Server(config)
     loop.run_until_complete(self._server.serve())
 

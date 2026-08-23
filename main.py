@@ -35,6 +35,9 @@ def main():
   """
   app = QApplication(sys.argv)
   app.setApplicationName(Config.APP_NAME)
+  from ui.icon import make_app_icon, apply_window_icon, set_app_user_model_id
+  app.setWindowIcon(make_app_icon())
+  set_app_user_model_id()
 
   from PyQt6.QtCore import QSharedMemory
   from PyQt6.QtWidgets import QMessageBox
@@ -47,6 +50,8 @@ def main():
   app.setStyleSheet(DARK_QSS)
 
   w = MainWindow()
+  from ui.icon import apply_window_icon
+  apply_window_icon(w)
   w.show()
   sys.exit(app.exec())
 
