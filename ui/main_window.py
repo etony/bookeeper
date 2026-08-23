@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QGroupBox, QLabel, QLineEdit, QComboBox, QPushButton, QTableView,
   QDateEdit, QFileDialog, QMessageBox, QMenu, QHeaderView, QStatusBar, QProgressDialog,
-  QAbstractSpinBox, QDialog, QListWidget, QDialogButtonBox, QFrame,
+  QAbstractSpinBox, QDialog, QListWidget, QListWidgetItem, QDialogButtonBox, QFrame,
 )
 
 from config import Config
