@@ -14,6 +14,7 @@ from PyQt6.QtGui import QImage, QPixmap, QPalette
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser, QPushButton
 
 from config import Config
+from ui.theme import ACCENT, DIALOG_MARGINS, DIALOG_SPACING
 
 LOG = logging.getLogger(__name__)
 from services import get_repo
@@ -89,8 +90,8 @@ class DetailDialog(QDialog):
     self.setWindowTitle('图书详情')
     self.resize(*Config.DETAIL_DIALOG_SIZE)
     layout = QHBoxLayout(self)
-    layout.setContentsMargins(16, 16, 16, 16)
-    layout.setSpacing(16)
+    layout.setContentsMargins(*DIALOG_MARGINS)
+    layout.setSpacing(DIALOG_SPACING)
 
     # ── 左侧：封面 ──────────────────────────────────────
     self._cover = QLabel('无封面')
@@ -103,7 +104,7 @@ class DetailDialog(QDialog):
 
     # ── 右侧：信息 + 翻页按钮 ───────────────────────────
     right = QVBoxLayout()
-    right.setSpacing(10)
+    right.setSpacing(DIALOG_SPACING)
 
     self._info = QTextBrowser()
     self._info.setOpenExternalLinks(True)    # 点击链接自动在浏览器打开
@@ -111,9 +112,11 @@ class DetailDialog(QDialog):
     right.addWidget(self._info)
 
     nav = QHBoxLayout()
-    nav.setSpacing(8)
+    nav.setSpacing(DIALOG_SPACING)
     self._prev_btn = QPushButton('◀ 上一本')
     self._next_btn = QPushButton('下一本 ▶')
+    self._prev_btn.setToolTip('查看上一本图书')
+    self._next_btn.setToolTip('查看下一本图书')
     self._prev_btn.clicked.connect(self._prev)
     self._next_btn.clicked.connect(self._next)
     nav.addStretch()
@@ -184,7 +187,6 @@ class DetailDialog(QDialog):
     # 用 HTML 渲染图书信息（颜色跟随主题 palette）
     pal = self.palette()
     muted = pal.color(QPalette.ColorRole.PlaceholderText).name()
-    accent = '#e8922a'
     info_html = f'''<div style="padding: 8px;">
 <div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{book.title}</div>
 <table style="line-height: 1.8;">
@@ -195,7 +197,7 @@ class DetailDialog(QDialog):
 <tr><td style="color:{muted};">ISBN</td><td>{book.isbn}</td></tr>
 <tr><td style="color:{muted};">评分</td><td>{book.rating} 分 / {book.raters} 人</td></tr>
 <tr><td style="color:{muted};">推荐</td><td>{book.recommend}</td></tr>
-<tr><td style="color:{muted};">链接</td><td><a style="color:{accent}; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
+<tr><td style="color:{muted};">链接</td><td><a style="color:{ACCENT}; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
 </table></div>'''
     self._info.setHtml(info_html)
 

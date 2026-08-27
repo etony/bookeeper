@@ -19,13 +19,13 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTabWidget
 
 from database import BookRepo
+from ui.theme import ACCENT, DIALOG_MARGINS
 
 # 统计面板配色——和主窗口主题保持一致
 DARK_BG = '#1c1c1f'
 DARK_FG = '#e0e0e4'
 LIGHT_BG = '#f8f6f2'
 LIGHT_FG = '#2c3e50'
-ACCENT = '#e8922a'
 
 
 class StatsDialog(QDialog):
@@ -50,7 +50,7 @@ class StatsDialog(QDialog):
     self._dark_mode = dark_mode
 
     layout = QVBoxLayout(self)
-    layout.setContentsMargins(8, 8, 8, 8)
+    layout.setContentsMargins(*DIALOG_MARGINS)
 
     tabs = QTabWidget()
     tabs.addTab(self._make_status_chart(), '阅读状态')

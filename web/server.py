@@ -62,12 +62,31 @@ form{background:var(--surface);border:1px solid var(--border);border-radius:var(
 form label{display:block;font-size:12px;color:var(--text2);margin-top:12px;margin-bottom:4px}
 form input,form select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:14px;outline:none}
 form input:focus,form select:focus{border-color:var(--accent)}
+.cover-wall{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:16px}
+.cover-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px;cursor:pointer;transition:all .2s}
+.cover-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.cover-card img{width:100%;height:200px;object-fit:contain;border-radius:4px;background:#2c2c31}
+.cover-card .no-cover{width:100%;height:200px;display:flex;align-items:center;justify-content:center;background:#2c2c31;border-radius:4px;color:var(--text3);font-size:13px}
+.cover-card .info{margin-top:8px;text-align:center}
+.cover-card .title{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cover-card .meta{font-size:12px;color:var(--text2);margin-top:4px}
+.cover-card .rating{display:inline-block;background:rgba(232,146,42,.15);color:var(--accent);padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600}
+.cover-card .status{display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:500;margin-right:4px}
+.cover-card .status-已读{background:#4a9;color:white}
+.cover-card .status-计划{background:#58a;color:white}
+.cover-card .status-默认{background:#666;color:white}
+.sort-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+.sort-bar select{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;color:var(--text);font-size:13px}
+@media(max-width:900px){.cover-wall{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:700px){.cover-wall{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:500px){.cover-wall{grid-template-columns:repeat(2,1fr)}}
 '''
 
 # 导航栏 HTML 片段（所有页面共享）
 NAV = '''
 <div class="nav">
 <a href="/">📚 图书列表</a>
+<a href="/cover-wall">🖼️ 封面墙</a>
 <a href="/add">➕ 添加</a>
 <a href="/stats">📊 统计</a>
 </div>'''
@@ -162,6 +181,45 @@ class BookWebServer:
                   f'<th>价格</th><th>评分</th><th>状态</th><th>书柜</th><th>操作</th>'
                   f'</tr></thead><tbody>{rows}</tbody></table>'
                   f'<div class="pagination">{pages_html}</div>')
+
+    @app.get('/cover-wall', response_class=HTMLResponse)
+    def cover_wall(q: str = '', sort: str = 'title'):
+      """封面墙页面：以封面网格展示图书"""
+      books = self._repo.search(q) if q else self._repo.get_all()
+      # 排序
+      if sort == 'rating':
+        def rating_key(b):
+          try: return -float(b.rating)
+          except: return 0
+        books = sorted(books, key=rating_key)
+      elif sort == 'date':
+        books = sorted(books, key=lambda b: b.start_date or '9999')
+      elif sort == 'added':
+        books = sorted(books, key=lambda b: b.isbn)
+      else:  # title
+        books = sorted(books, key=lambda b: b.title.lower())
+      # 搜索栏
+      sort_opts = ''.join(f'<option{" selected" if sort==s else ""} value="{s}">{l}</option>'
+                          for s, l in [('title','书名'),('rating','评分'),('date','购书日期'),('added','添加时间')])
+      search = f'''<form class="toolbar" method="get" action="/cover-wall">
+<input type="text" name="q" placeholder="搜索..." value="{esc(q)}">
+<select name="sort">{sort_opts}</select>
+<button class="btn btn-primary">🔎 搜索</button></form>'''
+      # 封面网格
+      cards = ''
+      for b in books:
+        cover_html = f'<img src="/cover/{esc(b.isbn)}" alt="封面" loading="lazy">' if b.cover_url else '<div class="no-cover">无封面</div>'
+        rating_html = f'<span class="rating">{esc(b.rating)}</span>' if b.rating and b.rating != '0' else ''
+        status_cls = f'status-{b.status}' if b.status in ('已读','计划') else 'status-默认'
+        title = esc(b.title) if b.title else '未知书名'
+        if len(title) > 15: title = title[:14] + '...'
+        cards += f'''<a href="/book/{esc(b.isbn)}" class="cover-card">
+{cover_html}
+<div class="info">
+<div class="title">{title}</div>
+<div class="meta"><span class="status {status_cls}">{esc(b.status)}</span> {rating_html}</div>
+</div></a>'''
+      return page('封面墙', f'{search}<div class="summary">共 {len(books)} 本</div><div class="cover-wall">{cards}</div>')
 
     @app.get('/add', response_class=HTMLResponse)
     def add_page(isbn: str = '', fetch: str = ''):

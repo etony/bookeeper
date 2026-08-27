@@ -58,9 +58,14 @@ class Config:
 
   # ── 界面尺寸与列定义 ──────────────────────────────────────
   TABLE_COLUMNS = ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
-  MAIN_WINDOW_SIZE = (950, 1000)
-  SEARCH_DIALOG_SIZE = (500, 420)
-  DETAIL_DIALOG_SIZE = (520, 500)
+  MAIN_WINDOW_SIZE = (1000, 800)
+  SEARCH_DIALOG_SIZE = (700, 420)
+  DETAIL_DIALOG_SIZE = (580, 500)
+
+  # ── 封面墙配置 ──────────────────────────────────────────
+  COVER_WALL_COLUMNS = 5          # 每行显示的图书数量
+  COVER_CARD_WIDTH = 150          # 封面卡片宽度
+  COVER_CARD_HEIGHT = 230         # 封面卡片高度
 
   # ── 图书状态与书柜 ────────────────────────────────────────
   STATUSES = ['默认', '计划', '已读']

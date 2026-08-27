@@ -18,8 +18,9 @@ import ctypes.wintypes
 from PyQt6.QtCore import Qt, QRectF, QBuffer, QIODevice
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QIcon, QImage
 
+from ui.theme import ACCENT
 
-ACCENT = '#e8922a'
+
 RADIUS_RATIO = 0.18
 FONT_RATIO = 0.65
 
@@ -147,7 +148,7 @@ def make_about_icon() -> QIcon:
   painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
   # 外圈
-  painter.setPen(QColor('#5a5a62'))
+  painter.setPen(QColor('#8a8a8a'))
   painter.setBrush(Qt.BrushStyle.NoBrush)
   painter.drawEllipse(1, 1, 18, 18)
 
@@ -156,7 +157,7 @@ def make_about_icon() -> QIcon:
   font.setPixelSize(12)
   font.setBold(True)
   painter.setFont(font)
-  painter.setPen(QColor('#5a5a62'))
+  painter.setPen(QColor('#8a8a8a'))
   painter.drawText(QRectF(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, 'i')
 
   painter.end()

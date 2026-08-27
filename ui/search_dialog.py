@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config import Config
+from ui.theme import ACCENT, DIALOG_MARGINS, DIALOG_SPACING
 from services.douban import DoubanService
 
 
@@ -75,22 +76,23 @@ class SearchDialog(QDialog):
     self.setWindowTitle('豆瓣图书搜索')
     self.resize(*Config.SEARCH_DIALOG_SIZE)
     layout = QVBoxLayout(self)
-    layout.setContentsMargins(12, 12, 12, 12)
-    layout.setSpacing(8)
+    layout.setContentsMargins(*DIALOG_MARGINS)
+    layout.setSpacing(DIALOG_SPACING)
 
     # ── 顶部搜索栏 ──────────────────────────────────────
     top = QHBoxLayout()
-    top.setSpacing(6)
+    top.setSpacing(DIALOG_SPACING)
     self._input = QLineEdit()
     self._input.setPlaceholderText('输入书名关键词，回车搜索...')
     self._input.returnPressed.connect(self._search)
     top.addWidget(self._input, stretch=1)
     self._search_btn = QPushButton('🔎 搜索')
     self._search_btn.setFixedWidth(100)
+    self._search_btn.setToolTip('搜索豆瓣图书')
     self._search_btn.clicked.connect(self._search)
     top.addWidget(self._search_btn)
     self._loading = QLabel('')
-    self._loading.setStyleSheet('color: #e8922a; font-size: 13px;')
+    self._loading.setStyleSheet(f'color: {ACCENT}; font-size: 13px;')
     top.addWidget(self._loading)
     layout.addLayout(top)
 

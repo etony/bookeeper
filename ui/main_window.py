@@ -86,7 +86,13 @@ class MainWindow(QMainWindow):
     layout.addWidget(self._make_book_form())
     layout.addWidget(self._make_search_bar())
 
-    # 图书表格——主内容区，占据剩余空间
+    # 主内容区容器，用于切换表格视图和封面墙视图
+    self._content_stack = QWidget()
+    self._content_stack_layout = QVBoxLayout(self._content_stack)
+    self._content_stack_layout.setContentsMargins(0, 0, 0, 0)
+    self._content_stack_layout.setSpacing(0)
+
+    # 图书表格视图
     self._table = QTableView()
     self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
     self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -98,7 +104,21 @@ class MainWindow(QMainWindow):
     hdr.setSectionsMovable(True)
     hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     hdr.customContextMenuRequested.connect(self._show_header_menu)
-    layout.addWidget(self._table, stretch=1)
+    self._content_stack_layout.addWidget(self._table)
+
+    # 封面墙视图
+    from ui.cover_wall import CoverWallWidget
+    self._cover_wall = CoverWallWidget()
+    self._cover_wall.book_selected.connect(self._on_cover_wall_selected)
+    self._cover_wall.book_opened.connect(self._on_cover_wall_opened)
+    self._cover_wall.book_context_menu.connect(self._on_cover_wall_context_menu)
+    self._cover_wall.hide()  # 默认隐藏
+    self._content_stack_layout.addWidget(self._cover_wall)
+
+    # 当前视图模式：True=封面墙，False=表格
+    self._is_cover_wall_mode = False
+
+    layout.addWidget(self._content_stack, stretch=1)
 
     sb = QStatusBar(self)
     sb.setFont(QFont('', 11))
@@ -126,25 +146,28 @@ class MainWindow(QMainWindow):
     self._btn_save = QPushButton('💾 保存 CSV')
     self._btn_save.setToolTip('导出全部数据为 CSV')
     self._btn_stats = QPushButton('📊 统计')
+    self._btn_stats.setToolTip('查看图书统计信息')
     self._btn_search_douban = QPushButton('🌐 豆瓣搜索')
     self._btn_search_douban.setToolTip('从豆瓣搜索图书并添加 (Ctrl+D)')
+    self._btn_cover_wall = QPushButton('🖼️ 封面墙')
+    self._btn_cover_wall.setToolTip('切换到封面墙视图 (Ctrl+W)')
     self._btn_web = QPushButton('🌐 Web 服务')
     self._btn_web.setToolTip('启动/停止内嵌 Web 服务')
     self._btn_restore = QPushButton('⏪ 恢复')
     self._btn_restore.setToolTip('从备份恢复数据库')
     from ui.icon import make_theme_icon, make_about_icon
     self._btn_theme = QPushButton(make_theme_icon(self._dark_mode), '')
-    self._btn_theme.setFixedSize(38, 32)
+    self._btn_theme.setFixedSize(38, 34)
     self._btn_theme.setToolTip('切换亮色/暗色主题')
     self._btn_about = QPushButton(make_about_icon(), '')
-    self._btn_about.setFixedSize(38, 32)
+    self._btn_about.setFixedSize(38, 34)
     self._btn_about.setToolTip('关于 Bookeeper')
 
-    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_web, self._btn_restore):
-      btn.setFixedHeight(32)
-      btn.setMinimumWidth(85)
+    for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_cover_wall, self._btn_web, self._btn_restore):
+      btn.setFixedHeight(34)
+      btn.setMinimumWidth(90)
     for btn in (self._btn_theme, self._btn_about):
-      btn.setFixedHeight(32)
+      btn.setFixedHeight(34)
 
     # 数据操作组
     row.addWidget(self._btn_load)
@@ -153,6 +176,7 @@ class MainWindow(QMainWindow):
     # 搜索分析组
     row.addWidget(self._btn_search_douban)
     row.addWidget(self._btn_stats)
+    row.addWidget(self._btn_cover_wall)
     sep()
     # 服务组
     row.addWidget(self._btn_web)
@@ -195,7 +219,7 @@ class MainWindow(QMainWindow):
     self._btn_update = QPushButton('💾 更新记录')
     self._btn_clear = QPushButton('✕ 清空')
     for btn in (self._btn_fetch, self._btn_new, self._btn_update, self._btn_clear):
-      btn.setFixedHeight(30)
+      btn.setFixedHeight(34)
       r0.addWidget(btn)
     layout.addLayout(r0)
 
@@ -216,7 +240,6 @@ class MainWindow(QMainWindow):
       edit.setDisplayFormat('yyyy/M/d')
       edit.setCalendarPopup(False)
       edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-      edit.setFixedWidth(150)
     self._start_date.setDate(QDate(1900, 1, 1))
     self._end_date.setDate(QDate.currentDate())
     grid = QGridLayout()
@@ -240,23 +263,23 @@ class MainWindow(QMainWindow):
     """搜索栏：关键词输入 + 状态下拉 + 查询/重置按钮"""
     g = QGroupBox('🔎 搜索')
     row = QHBoxLayout(g)
-    row.setContentsMargins(6, 14, 6, 6)
+    row.setContentsMargins(8, 14, 8, 6)
     row.setSpacing(4)
 
     self._search_input = QLineEdit()
     self._search_input.setPlaceholderText('输入关键词搜索书名/作者/出版社/ISBN')
-    self._search_input.setFixedHeight(30)
+    self._search_input.setFixedHeight(34)
     row.addWidget(self._search_input, stretch=1)
     row.addWidget(QLabel('状态'))
     self._search_status = QComboBox()
     self._search_status.addItems(['全部'] + Config.STATUSES)
     self._search_status.setCurrentIndex(0)
-    self._search_status.setFixedHeight(30)
+    self._search_status.setFixedHeight(34)
     row.addWidget(self._search_status)
     self._btn_search = QPushButton('🔎 查询')
-    self._btn_search.setFixedHeight(30)
+    self._btn_search.setFixedHeight(34)
     self._btn_reset = QPushButton('⟲ 重置')
-    self._btn_reset.setFixedHeight(30)
+    self._btn_reset.setFixedHeight(34)
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_reset)
     return g
@@ -276,12 +299,12 @@ class MainWindow(QMainWindow):
     df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
-    # 列宽模式：默认拉伸填满，前三列可交互调整
+    # 列宽模式：默认拉伸填满，前三列自动调整内容宽度
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+    hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+    hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
     self._load_data()
 
   def _load_data(self):
@@ -296,7 +319,61 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
+    # 同时更新封面墙数据
+    if hasattr(self, '_cover_wall'):
+      self._cover_wall.set_books(books)
     self._update_status()
+
+  def _toggle_cover_wall(self):
+    """切换表格视图和封面墙视图"""
+    self._is_cover_wall_mode = not self._is_cover_wall_mode
+    if self._is_cover_wall_mode:
+      self._table.hide()
+      self._cover_wall.show()
+      self._btn_cover_wall.setText('📊 表格视图')
+      self._btn_cover_wall.setToolTip('切换到表格视图 (Ctrl+W)')
+    else:
+      self._cover_wall.hide()
+      self._table.show()
+      self._btn_cover_wall.setText('🖼️ 封面墙')
+      self._btn_cover_wall.setToolTip('切换到封面墙视图 (Ctrl+W)')
+
+  def _on_cover_wall_selected(self, isbn: str):
+    """封面墙选中图书事件"""
+    book = self._repo.get_by_isbn(isbn)
+    if book:
+      self._fill_form(book)
+
+  def _on_cover_wall_opened(self, isbn: str):
+    """封面墙双击打开图书详情事件"""
+    self._open_detail(isbn)
+
+  def _on_cover_wall_context_menu(self, isbn: str, pos):
+    """封面墙右键菜单事件"""
+    menu = QMenu(self)
+    view_action = QAction(QIcon(), '📖 查看详情', self)
+    edit_action = QAction(QIcon(), '✏️ 编辑', self)
+    delete_action = QAction(QIcon(), '🗑 删除', self)
+    menu.addAction(view_action)
+    menu.addAction(edit_action)
+    menu.addSeparator()
+    menu.addAction(delete_action)
+    action = menu.exec(pos)
+    if action == view_action:
+      self._open_detail(isbn)
+    elif action == edit_action:
+      book = self._repo.get_by_isbn(isbn)
+      if book:
+        self._fill_form(book)
+    elif action == delete_action:
+      ret = QMessageBox.question(
+        self, '确认删除',
+        f'确定删除图书？此操作不可撤销。',
+      )
+      if ret == QMessageBox.StandardButton.Yes:
+        self._repo.delete(isbn)
+        self._mark_dirty()
+        self._load_data()
 
   # ══════════════════════════════════════════════
   #  信号与快捷键
@@ -316,6 +393,7 @@ class MainWindow(QMainWindow):
     self._btn_search.clicked.connect(self._search)
     self._btn_reset.clicked.connect(self._reset_search)
     self._btn_search_douban.clicked.connect(self._open_search_dialog)
+    self._btn_cover_wall.clicked.connect(self._toggle_cover_wall)
     self._btn_web.clicked.connect(self._toggle_web)
     self._btn_restore.clicked.connect(self._restore_backup)
     self._btn_about.clicked.connect(self._show_about)
@@ -331,6 +409,7 @@ class MainWindow(QMainWindow):
     QShortcut(QKeySequence('Ctrl+F'), self, self._search_input.setFocus)
     QShortcut(QKeySequence('Ctrl+R'), self, self._reset_search)
     QShortcut(QKeySequence('Ctrl+D'), self, self._open_search_dialog)
+    QShortcut(QKeySequence('Ctrl+W'), self, self._toggle_cover_wall)
 
   # ══════════════════════════════════════════════
   #  自动备份
@@ -593,6 +672,9 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
+    # 同时更新封面墙数据
+    if hasattr(self, '_cover_wall'):
+      self._cover_wall.set_books(books)
     self._update_status()
 
   def _reset_search(self):
@@ -614,6 +696,9 @@ class MainWindow(QMainWindow):
   def _on_search_result(self, book: Book):
     """豆瓣搜索结果回调：填入表单并存入数据库"""
     self._merge_user_fields(book)
+    # 如果是新书（ISBN不存在）且购书日期为空，设置为当前日期
+    if not book.start_date:
+      book.start_date = QDate.currentDate().toString('yyyy-MM-dd')
     self._fill_form(book)
     self._repo.upsert(book)
     self._mark_dirty()
