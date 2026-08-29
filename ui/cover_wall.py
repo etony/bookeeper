@@ -8,9 +8,11 @@
 """
 
 import os
+import threading
+from queue import Queue
 from typing import List, Optional
 
-from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QImage, QFont, QColor, QPainter, QPen, QAction
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
@@ -22,27 +24,40 @@ from models.book import Book
 from ui.theme import ACCENT
 
 
-class _CoverWorker(QObject):
-    """后台封面下载工作线程"""
+class CoverDownloadPool:
+    """封面下载线程池，限制并发数量"""
 
-    cover_ready = pyqtSignal(str, bytes)  # (isbn, image_data)
-    cover_error = pyqtSignal(str)         # isbn
+    def __init__(self, max_workers=3):
+        self._queue = Queue()
+        self._workers = []
+        self._lock = threading.Lock()
 
-    def __init__(self, isbn: str, cover_url: str):
-        super().__init__()
-        self._isbn = isbn
-        self._cover_url = cover_url
+        for _ in range(max_workers):
+            worker = threading.Thread(target=self._worker_loop, daemon=True)
+            worker.start()
+            self._workers.append(worker)
 
-    def run(self):
-        try:
-            from services.covers import get_cover
-            data, _ = get_cover(self._isbn, self._cover_url)
-            if data:
-                self.cover_ready.emit(self._isbn, data)
-            else:
-                self.cover_error.emit(self._isbn)
-        except Exception:
-            self.cover_error.emit(self._isbn)
+    def _worker_loop(self):
+        while True:
+            isbn, cover_url, callback = self._queue.get()
+            try:
+                from services.covers import get_cover
+                data, _ = get_cover(isbn, cover_url)
+                if callback:
+                    callback(isbn, data)
+            except Exception:
+                if callback:
+                    callback(isbn, None)
+            finally:
+                self._queue.task_done()
+
+    def submit(self, isbn: str, cover_url: str, callback=None):
+        """提交下载任务"""
+        self._queue.put((isbn, cover_url, callback))
+
+
+# 全局线程池实例
+_cover_pool = CoverDownloadPool()
 
 
 class CoverCard(QFrame):
@@ -153,19 +168,21 @@ class CoverCard(QFrame):
         self._start_cover_download()
 
     def _start_cover_download(self):
-        """启动后台封面下载"""
-        self._thread = QThread()
-        self._worker = _CoverWorker(self._book.isbn, self._book.cover_url)
-        self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.cover_ready.connect(self._on_cover_ready)
-        self._worker.cover_error.connect(self._on_cover_error)
-        self._worker.cover_ready.connect(self._thread.quit)
-        self._worker.cover_error.connect(self._thread.quit)
-        self._worker.cover_ready.connect(self._worker.deleteLater)
-        self._worker.cover_error.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
-        self._thread.start()
+        """使用线程池下载封面"""
+        _cover_pool.submit(
+            self._book.isbn,
+            self._book.cover_url,
+            self._on_cover_ready
+        )
+
+    def _apply_cover(self, isbn: str, data: bytes):
+        """在主线程中应用封面"""
+        if isbn != self._book.isbn:
+            return
+        if data:
+            self._set_cover_from_data(data)
+        else:
+            self._cover_label.setText('加载失败')
 
     def _on_cover_ready(self, isbn: str, data: bytes):
         """封面下载完成回调"""
