@@ -175,26 +175,12 @@ class CoverCard(QFrame):
             self._on_cover_ready
         )
 
-    def _apply_cover(self, isbn: str, data: bytes):
-        """在主线程中应用封面"""
-        if isbn != self._book.isbn:
-            return
-        if data:
-            self._set_cover_from_data(data)
-        else:
-            self._cover_label.setText('加载失败')
-
     def _on_cover_ready(self, isbn: str, data: bytes):
-        """封面下载完成回调"""
+        """封面下载完成回调（从线程池调用）"""
         if isbn != self._book.isbn:
             return
-        self._set_cover_from_data(data)
-
-    def _on_cover_error(self, isbn: str):
-        """封面下载失败回调"""
-        if isbn != self._book.isbn:
-            return
-        self._cover_label.setText('加载失败')
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self._set_cover_from_data(data))
 
     def _set_cover_from_data(self, data: bytes):
         """从图片数据设置封面"""
