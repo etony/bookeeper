@@ -487,7 +487,15 @@ class MainWindow(QMainWindow):
 
   def _do_fetch_book(self, isbn: str):
     """实际执行豆瓣查询"""
-    book = self._api.get_book_by_isbn(isbn)
+    try:
+      book = self._api.get_book_by_isbn(isbn)
+    except Exception as e:
+      # 恢复按钮状态
+      self._btn_fetch.setEnabled(True)
+      self._btn_fetch.setText('🌐 获取信息')
+      QMessageBox.warning(self, '错误', f'查询出错: {e}')
+      self.statusBar().showMessage('查询失败')
+      return
 
     # 恢复按钮状态
     self._btn_fetch.setEnabled(True)
