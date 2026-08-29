@@ -27,6 +27,7 @@ from models.book import Book
 from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService
+from services.undo import UndoManager
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 
@@ -55,6 +56,7 @@ class MainWindow(QMainWindow):
     self._repo = get_repo()
     self._api = DoubanService()
     self._backup_svc = BackupService()
+    self._undo_manager = UndoManager()
     self._dirty = False
     self._dark_mode = True
     self._setup_ui()
@@ -421,6 +423,25 @@ class MainWindow(QMainWindow):
     QShortcut(QKeySequence('Ctrl+R'), self, self._reset_search)
     QShortcut(QKeySequence('Ctrl+D'), self, self._open_search_dialog)
     QShortcut(QKeySequence('Ctrl+W'), self, self._toggle_cover_wall)
+    QShortcut(QKeySequence('Ctrl+Z'), self, self._undo)
+    QShortcut(QKeySequence('Ctrl+Y'), self, self._redo)
+    QShortcut(QKeySequence('Ctrl+Shift+Z'), self, self._redo)
+
+  def _undo(self):
+    """撤销上一个操作"""
+    if self._undo_manager.undo():
+      self._load_data()
+      self.statusBar().showMessage('已撤销')
+    else:
+      self.statusBar().showMessage('没有可撤销的操作')
+
+  def _redo(self):
+    """重做上一个撤销的操作"""
+    if self._undo_manager.redo():
+      self._load_data()
+      self.statusBar().showMessage('已重做')
+    else:
+      self.statusBar().showMessage('没有可重做的操作')
 
   # ══════════════════════════════════════════════
   #  自动备份
