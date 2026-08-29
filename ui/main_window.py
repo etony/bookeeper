@@ -27,7 +27,7 @@ from models.book import Book
 from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService
-from services.undo import UndoManager
+from services.undo import UndoManager, AddBookCommand, DeleteBookCommand, UpdateBookCommand
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 
@@ -381,10 +381,12 @@ class MainWindow(QMainWindow):
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
-        f'确定删除图书？此操作不可撤销。',
+        f'确定删除图书？可通过 Ctrl+Z 撤销。',
       )
       if ret == QMessageBox.StandardButton.Yes:
-        self._repo.delete(isbn)
+        book = self._repo.get_by_isbn(isbn)
+        if book:
+          self._undo_manager.execute(DeleteBookCommand(self._repo, book))
         self._mark_dirty()
         self._load_data()
 
@@ -529,7 +531,7 @@ class MainWindow(QMainWindow):
 
     self._merge_user_fields(book)
     self._fill_form(book)
-    self._repo.upsert(book)
+    self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
@@ -583,7 +585,11 @@ class MainWindow(QMainWindow):
       price=row_data[4], rating=row_data[5], raters=row_data[6], status=row_data[7],
       shelf=row_data[8], start_date=row_data[9], end_date=row_data[10],
     )
-    self._repo.upsert(book)
+    old_book = self._repo.get_by_isbn(isbn)
+    if old_book:
+      self._undo_manager.execute(UpdateBookCommand(self._repo, old_book, book))
+    else:
+      self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     
     # 使用增量更新
@@ -720,12 +726,14 @@ class MainWindow(QMainWindow):
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
-        f'确定删除选中的 {len(isbn_list)} 本图书？此操作不可撤销。',
+        f'确定删除选中的 {len(isbn_list)} 本图书？可通过 Ctrl+Z 撤销。',
       )
       if ret != QMessageBox.StandardButton.Yes:
         return
       for isbn in isbn_list:
-        self._repo.delete(isbn)
+        book = self._repo.get_by_isbn(isbn)
+        if book:
+          self._undo_manager.execute(DeleteBookCommand(self._repo, book))
       self._mark_dirty()
       self._load_data()
 
@@ -734,8 +742,12 @@ class MainWindow(QMainWindow):
     for isbn in isbn_list:
       book = self._repo.get_by_isbn(isbn)
       if book:
-        book.status = new_status
-        self._repo.upsert(book)
+        new_book = Book(
+          isbn=book.isbn, title=book.title, author=book.author, publisher=book.publisher,
+          price=book.price, rating=book.rating, raters=book.raters, status=new_status,
+          shelf=book.shelf, start_date=book.start_date, end_date=book.end_date,
+        )
+        self._undo_manager.execute(UpdateBookCommand(self._repo, book, new_book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已将 {len(isbn_list)} 本图书设为"{new_status}"')
@@ -783,7 +795,7 @@ class MainWindow(QMainWindow):
     if not book.start_date:
       book.start_date = QDate.currentDate().toString('yyyy-MM-dd')
     self._fill_form(book)
-    self._repo.upsert(book)
+    self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已从豆瓣添加: {book.title}')
