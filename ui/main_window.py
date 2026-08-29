@@ -507,17 +507,19 @@ class MainWindow(QMainWindow):
 
   def _update_book(self):
     """
-    从表单读取数据，更新到数据库。
-
-    ISBN 从第 0 列取（表单中不可修改的隐含主键）。
-    评分字段格式是 "评分/人数"，需要拆开。
+    从表单读取数据，更新到数据库（使用增量更新）。
     """
     isbn = self._isbn_input.text().strip()
     title = self._title_input.text().strip()
     if not isbn and not title:
       QMessageBox.warning(self, '提示', '请至少填写 ISBN 或书名')
       return
-    row = [
+    
+    # 获取当前选中行
+    selected = self._table.currentIndex()
+    row = selected.row() if selected.isValid() else -1
+    
+    row_data = [
       isbn,
       self._title_input.text(),
       self._author_input.text(),
@@ -530,14 +532,21 @@ class MainWindow(QMainWindow):
       self._get_date(self._start_date),
       self._get_date(self._end_date),
     ]
+    
     book = Book(
-      isbn=row[0], title=row[1], author=row[2], publisher=row[3],
-      price=row[4], rating=row[5], raters=row[6], status=row[7],
-      shelf=row[8], start_date=row[9], end_date=row[10],
+      isbn=row_data[0], title=row_data[1], author=row_data[2], publisher=row_data[3],
+      price=row_data[4], rating=row_data[5], raters=row_data[6], status=row_data[7],
+      shelf=row_data[8], start_date=row_data[9], end_date=row_data[10],
     )
     self._repo.upsert(book)
     self._mark_dirty()
-    self._load_data()
+    
+    # 使用增量更新
+    if row >= 0:
+      self._model.update_row(row, row_data)
+    else:
+      self._load_data()
+    
     self.statusBar().showMessage('已更新')
 
   def _clear_form(self):
