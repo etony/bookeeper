@@ -544,6 +544,10 @@ class MainWindow(QMainWindow):
     # 使用增量更新
     if row >= 0:
       self._model.update_row(row, row_data)
+      # 同步封面墙和状态栏
+      if hasattr(self, '_cover_wall'):
+        self._cover_wall.set_books(self._repo.get_all())
+      self._update_status()
     else:
       self._load_data()
     
