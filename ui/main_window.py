@@ -641,7 +641,7 @@ class MainWindow(QMainWindow):
       self._end_date.setDate(QDate(1900, 1, 1))
 
   def _show_context_menu(self, pos):
-    """表格右键菜单：删除选中行"""
+    """表格右键菜单：删除选中行、批量修改状态"""
     if self._model.rowCount() == 0:
       return
     indexes = self._table.selectedIndexes()
@@ -660,15 +660,29 @@ class MainWindow(QMainWindow):
     view_action = QAction(QIcon(), '📖 查看详情', self)
     edit_action = QAction(QIcon(), '✏️ 编辑', self)
     delete_action = QAction(QIcon(), '🗑 删除选中', self)
+
+    # 批量操作子菜单
+    batch_menu = QMenu('批量操作', menu)
+    for status in Config.STATUSES:
+      action = QAction(QIcon(), f'设为"{status}"', batch_menu)
+      action.setData(('status', status))
+      batch_menu.addAction(action)
+
     menu.addAction(view_action)
     menu.addAction(edit_action)
     menu.addSeparator()
+    menu.addMenu(batch_menu)
+    menu.addSeparator()
     menu.addAction(delete_action)
+
     action = menu.exec(self._table.mapToGlobal(pos))
     if action == view_action and isbn_list:
       self._open_detail(isbn_list[0])
     elif action == edit_action and isbn_list:
       self._load_by_isbn(isbn_list[0])
+    elif action and action.data() and action.data()[0] == 'status':
+      new_status = action.data()[1]
+      self._batch_update_status(isbn_list, new_status)
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
@@ -680,6 +694,17 @@ class MainWindow(QMainWindow):
         self._repo.delete(isbn)
       self._mark_dirty()
       self._load_data()
+
+  def _batch_update_status(self, isbn_list: list, new_status: str):
+    """批量修改图书状态"""
+    for isbn in isbn_list:
+      book = self._repo.get_by_isbn(isbn)
+      if book:
+        book.status = new_status
+        self._repo.upsert(book)
+    self._mark_dirty()
+    self._load_data()
+    self.statusBar().showMessage(f'已将 {len(isbn_list)} 本图书设为"{new_status}"')
 
   # ══════════════════════════════════════════════
   #  搜索
