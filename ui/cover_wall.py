@@ -140,9 +140,10 @@ class CoverCard(QFrame):
         return styles.get(self._book.status, styles['默认'])
 
     def _update_style(self, hovered: bool):
-        """更新卡片边框样式"""
+        """更新卡片边框样式（跟随主题）"""
+        from ui.theme import ACCENT
         if hovered:
-            self.setStyleSheet('QFrame { border: 2px solid #e8922a; border-radius: 6px; background-color: #2a2a2e; }')
+            self.setStyleSheet(f'QFrame {{ border: 2px solid {ACCENT}; border-radius: 6px; background-color: #2a2a2e; }}')
         else:
             self.setStyleSheet('QFrame { border: 1px solid #3a3a40; border-radius: 6px; background-color: #2a2a2e; }')
 
