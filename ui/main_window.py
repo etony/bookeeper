@@ -282,7 +282,18 @@ class MainWindow(QMainWindow):
     self._btn_reset.setFixedHeight(34)
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_reset)
+
+    self._search_timer = QTimer(self)
+    self._search_timer.setSingleShot(True)
+    self._search_timer.timeout.connect(self._search)
+    self._search_input.textChanged.connect(self._on_search_text_changed)
+
     return g
+
+  def _on_search_text_changed(self, text):
+    """搜索文本变化时重置定时器（防抖 300ms）"""
+    self._search_timer.stop()
+    self._search_timer.start(300)
 
   # ══════════════════════════════════════════════
   #  数据模型
