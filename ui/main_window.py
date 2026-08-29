@@ -463,16 +463,7 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _fetch_book(self):
-    """
-    从豆瓣 API 获取 ISBN 对应的图书信息并填入表单。
-
-    流程：
-      1. 清洗 ISBN（去除非数字字符）
-      2. 校验 ISBN-13 或 ISBN-10 的校验位
-      3. 调用豆瓣 API 查询
-      4. 填入表单 + 自动存入数据库
-      5. 刷新表格
-    """
+    """从豆瓣 API 获取 ISBN 对应的图书信息并填入表单"""
     from utils import clean_isbn, is_valid_isbn13, is_valid_isbn10
     raw = self._isbn_input.text().strip()
     isbn = clean_isbn(raw)
@@ -486,8 +477,22 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '错误', f'ISBN-10 校验位无效: {isbn}')
       return
 
+    # 禁用按钮，显示加载状态
+    self._btn_fetch.setEnabled(False)
+    self._btn_fetch.setText('⏳ 查询中...')
     self.statusBar().showMessage('正在查询豆瓣...')
+
+    # 使用 QTimer.singleShot 模拟异步（实际仍是同步，但界面会更新）
+    QTimer.singleShot(50, lambda: self._do_fetch_book(isbn))
+
+  def _do_fetch_book(self, isbn: str):
+    """实际执行豆瓣查询"""
     book = self._api.get_book_by_isbn(isbn)
+
+    # 恢复按钮状态
+    self._btn_fetch.setEnabled(True)
+    self._btn_fetch.setText('🌐 获取信息')
+
     if not book:
       QMessageBox.warning(self, '错误', f'未找到图书: {isbn}')
       self.statusBar().showMessage('查询失败')
