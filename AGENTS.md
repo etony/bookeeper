@@ -35,3 +35,7 @@ python main.pyw         # 无控制台窗口（Windows）
 - uvicorn 启动时必须 `log_config=None`，否则 pythonw 下 stdout 为 None 导致 formatter 配置失败
 - Web 服务通过 `BookWebServer.start()` 在独立线程运行 uvicorn，`stop()` 设置 `should_exit=True` 优雅关闭
 - 单实例检测用 `QSharedMemory`，重复启动会弹窗提示并退出
+
+## Workflow
+
+- 每次代码改动完成后自动 `git add -A && git commit`，提交信息用英文简述改动内容。
