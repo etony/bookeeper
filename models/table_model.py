@@ -99,3 +99,30 @@ class BookTableModel(QAbstractTableModel):
     self._original = df
     self._data = df.copy()
     self.endResetModel()
+
+  # ── 增量更新方法 ──────────────────────────────────────
+
+  def update_row(self, row: int, data: list):
+    """更新单行数据，避免全量刷新"""
+    if 0 <= row < self._data.shape[0]:
+      for col, value in enumerate(data):
+        if col < self._data.shape[1]:
+          self._data.iloc[row, col] = value
+      self.dataChanged.emit(
+        self.index(row, 0),
+        self.index(row, self._data.shape[1] - 1)
+      )
+
+  def insert_row(self, row: int, data: list):
+    """插入新行"""
+    new_row = pd.DataFrame([data], columns=self._data.columns)
+    self.beginInsertRows(QModelIndex(), row, row)
+    self._data = pd.concat([self._data.iloc[:row], new_row, self._data.iloc[row:]],
+                           ignore_index=True)
+    self.endInsertRows()
+
+  def remove_rows(self, rows: list):
+    """删除指定行"""
+    self.beginResetModel()
+    self._data = self._data.drop(rows).reset_index(drop=True)
+    self.endResetModel()

@@ -27,6 +27,7 @@ from models.book import Book
 from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService
+from services.undo import UndoManager, AddBookCommand, DeleteBookCommand, UpdateBookCommand
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 
@@ -55,6 +56,7 @@ class MainWindow(QMainWindow):
     self._repo = get_repo()
     self._api = DoubanService()
     self._backup_svc = BackupService()
+    self._undo_manager = UndoManager()
     self._dirty = False
     self._dark_mode = True
     self._setup_ui()
@@ -282,7 +284,18 @@ class MainWindow(QMainWindow):
     self._btn_reset.setFixedHeight(34)
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_reset)
+
+    self._search_timer = QTimer(self)
+    self._search_timer.setSingleShot(True)
+    self._search_timer.timeout.connect(self._search)
+    self._search_input.textChanged.connect(self._on_search_text_changed)
+
     return g
+
+  def _on_search_text_changed(self, text):
+    """搜索文本变化时重置定时器（防抖 300ms）"""
+    self._search_timer.stop()
+    self._search_timer.start(300)
 
   # ══════════════════════════════════════════════
   #  数据模型
@@ -368,10 +381,12 @@ class MainWindow(QMainWindow):
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
-        f'确定删除图书？此操作不可撤销。',
+        f'确定删除图书？可通过 Ctrl+Z 撤销。',
       )
       if ret == QMessageBox.StandardButton.Yes:
-        self._repo.delete(isbn)
+        book = self._repo.get_by_isbn(isbn)
+        if book:
+          self._undo_manager.execute(DeleteBookCommand(self._repo, book))
         self._mark_dirty()
         self._load_data()
 
@@ -410,6 +425,25 @@ class MainWindow(QMainWindow):
     QShortcut(QKeySequence('Ctrl+R'), self, self._reset_search)
     QShortcut(QKeySequence('Ctrl+D'), self, self._open_search_dialog)
     QShortcut(QKeySequence('Ctrl+W'), self, self._toggle_cover_wall)
+    QShortcut(QKeySequence('Ctrl+Z'), self, self._undo)
+    QShortcut(QKeySequence('Ctrl+Y'), self, self._redo)
+    QShortcut(QKeySequence('Ctrl+Shift+Z'), self, self._redo)
+
+  def _undo(self):
+    """撤销上一个操作"""
+    if self._undo_manager.undo():
+      self._load_data()
+      self.statusBar().showMessage('已撤销')
+    else:
+      self.statusBar().showMessage('没有可撤销的操作')
+
+  def _redo(self):
+    """重做上一个撤销的操作"""
+    if self._undo_manager.redo():
+      self._load_data()
+      self.statusBar().showMessage('已重做')
+    else:
+      self.statusBar().showMessage('没有可重做的操作')
 
   # ══════════════════════════════════════════════
   #  自动备份
@@ -452,16 +486,7 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _fetch_book(self):
-    """
-    从豆瓣 API 获取 ISBN 对应的图书信息并填入表单。
-
-    流程：
-      1. 清洗 ISBN（去除非数字字符）
-      2. 校验 ISBN-13 或 ISBN-10 的校验位
-      3. 调用豆瓣 API 查询
-      4. 填入表单 + 自动存入数据库
-      5. 刷新表格
-    """
+    """从豆瓣 API 获取 ISBN 对应的图书信息并填入表单"""
     from utils import clean_isbn, is_valid_isbn13, is_valid_isbn10
     raw = self._isbn_input.text().strip()
     isbn = clean_isbn(raw)
@@ -475,8 +500,30 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '错误', f'ISBN-10 校验位无效: {isbn}')
       return
 
+    # 禁用按钮，显示加载状态
+    self._btn_fetch.setEnabled(False)
+    self._btn_fetch.setText('⏳ 查询中...')
     self.statusBar().showMessage('正在查询豆瓣...')
-    book = self._api.get_book_by_isbn(isbn)
+
+    # 使用 QTimer.singleShot 模拟异步（实际仍是同步，但界面会更新）
+    QTimer.singleShot(50, lambda: self._do_fetch_book(isbn))
+
+  def _do_fetch_book(self, isbn: str):
+    """实际执行豆瓣查询"""
+    try:
+      book = self._api.get_book_by_isbn(isbn)
+    except Exception as e:
+      # 恢复按钮状态
+      self._btn_fetch.setEnabled(True)
+      self._btn_fetch.setText('🌐 获取信息')
+      QMessageBox.warning(self, '错误', f'查询出错: {e}')
+      self.statusBar().showMessage('查询失败')
+      return
+
+    # 恢复按钮状态
+    self._btn_fetch.setEnabled(True)
+    self._btn_fetch.setText('🌐 获取信息')
+
     if not book:
       QMessageBox.warning(self, '错误', f'未找到图书: {isbn}')
       self.statusBar().showMessage('查询失败')
@@ -484,7 +531,7 @@ class MainWindow(QMainWindow):
 
     self._merge_user_fields(book)
     self._fill_form(book)
-    self._repo.upsert(book)
+    self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
@@ -507,17 +554,19 @@ class MainWindow(QMainWindow):
 
   def _update_book(self):
     """
-    从表单读取数据，更新到数据库。
-
-    ISBN 从第 0 列取（表单中不可修改的隐含主键）。
-    评分字段格式是 "评分/人数"，需要拆开。
+    从表单读取数据，更新到数据库（使用增量更新）。
     """
     isbn = self._isbn_input.text().strip()
     title = self._title_input.text().strip()
     if not isbn and not title:
       QMessageBox.warning(self, '提示', '请至少填写 ISBN 或书名')
       return
-    row = [
+    
+    # 获取当前选中行
+    selected = self._table.currentIndex()
+    row = selected.row() if selected.isValid() else -1
+    
+    row_data = [
       isbn,
       self._title_input.text(),
       self._author_input.text(),
@@ -530,14 +579,29 @@ class MainWindow(QMainWindow):
       self._get_date(self._start_date),
       self._get_date(self._end_date),
     ]
+    
     book = Book(
-      isbn=row[0], title=row[1], author=row[2], publisher=row[3],
-      price=row[4], rating=row[5], raters=row[6], status=row[7],
-      shelf=row[8], start_date=row[9], end_date=row[10],
+      isbn=row_data[0], title=row_data[1], author=row_data[2], publisher=row_data[3],
+      price=row_data[4], rating=row_data[5], raters=row_data[6], status=row_data[7],
+      shelf=row_data[8], start_date=row_data[9], end_date=row_data[10],
     )
-    self._repo.upsert(book)
+    old_book = self._repo.get_by_isbn(isbn)
+    if old_book:
+      self._undo_manager.execute(UpdateBookCommand(self._repo, old_book, book))
+    else:
+      self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
-    self._load_data()
+    
+    # 使用增量更新
+    if row >= 0:
+      self._model.update_row(row, row_data)
+      # 同步封面墙和状态栏
+      if hasattr(self, '_cover_wall'):
+        self._cover_wall.set_books(self._repo.get_all())
+      self._update_status()
+    else:
+      self._load_data()
+    
     self.statusBar().showMessage('已更新')
 
   def _clear_form(self):
@@ -617,7 +681,7 @@ class MainWindow(QMainWindow):
       self._end_date.setDate(QDate(1900, 1, 1))
 
   def _show_context_menu(self, pos):
-    """表格右键菜单：删除选中行"""
+    """表格右键菜单：删除选中行、批量修改状态"""
     if self._model.rowCount() == 0:
       return
     indexes = self._table.selectedIndexes()
@@ -636,26 +700,57 @@ class MainWindow(QMainWindow):
     view_action = QAction(QIcon(), '📖 查看详情', self)
     edit_action = QAction(QIcon(), '✏️ 编辑', self)
     delete_action = QAction(QIcon(), '🗑 删除选中', self)
+
+    # 批量操作子菜单
+    batch_menu = QMenu('批量操作', menu)
+    for status in Config.STATUSES:
+      action = QAction(QIcon(), f'设为"{status}"', batch_menu)
+      action.setData(('status', status))
+      batch_menu.addAction(action)
+
     menu.addAction(view_action)
     menu.addAction(edit_action)
     menu.addSeparator()
+    menu.addMenu(batch_menu)
+    menu.addSeparator()
     menu.addAction(delete_action)
+
     action = menu.exec(self._table.mapToGlobal(pos))
     if action == view_action and isbn_list:
       self._open_detail(isbn_list[0])
     elif action == edit_action and isbn_list:
       self._load_by_isbn(isbn_list[0])
+    elif action and action.data() and action.data()[0] == 'status':
+      new_status = action.data()[1]
+      self._batch_update_status(isbn_list, new_status)
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
-        f'确定删除选中的 {len(isbn_list)} 本图书？此操作不可撤销。',
+        f'确定删除选中的 {len(isbn_list)} 本图书？可通过 Ctrl+Z 撤销。',
       )
       if ret != QMessageBox.StandardButton.Yes:
         return
       for isbn in isbn_list:
-        self._repo.delete(isbn)
+        book = self._repo.get_by_isbn(isbn)
+        if book:
+          self._undo_manager.execute(DeleteBookCommand(self._repo, book))
       self._mark_dirty()
       self._load_data()
+
+  def _batch_update_status(self, isbn_list: list, new_status: str):
+    """批量修改图书状态"""
+    for isbn in isbn_list:
+      book = self._repo.get_by_isbn(isbn)
+      if book:
+        new_book = Book(
+          isbn=book.isbn, title=book.title, author=book.author, publisher=book.publisher,
+          price=book.price, rating=book.rating, raters=book.raters, status=new_status,
+          shelf=book.shelf, start_date=book.start_date, end_date=book.end_date,
+        )
+        self._undo_manager.execute(UpdateBookCommand(self._repo, book, new_book))
+    self._mark_dirty()
+    self._load_data()
+    self.statusBar().showMessage(f'已将 {len(isbn_list)} 本图书设为"{new_status}"')
 
   # ══════════════════════════════════════════════
   #  搜索
@@ -700,7 +795,7 @@ class MainWindow(QMainWindow):
     if not book.start_date:
       book.start_date = QDate.currentDate().toString('yyyy-MM-dd')
     self._fill_form(book)
-    self._repo.upsert(book)
+    self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已从豆瓣添加: {book.title}')
