@@ -33,8 +33,8 @@ class BaseRepository(Generic[T]):
         """初始化数据库（子类实现）"""
         pass
     
-    def count(self) -> int:
-        """统计总数"""
+    def count(self, keyword: str = '', status: str = '') -> int:
+        """统计总数（支持按关键词和状态筛选）"""
         with self._conn() as conn:
             table_name = self._get_table_name()
             result = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()

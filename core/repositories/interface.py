@@ -8,8 +8,8 @@ class RepositoryInterface(ABC, Generic[T]):
     """Repository 通用接口"""
     
     @abstractmethod
-    def get_by_id(self, id: str) -> Optional[T]:
-        """根据 ID 获取单个对象"""
+    def get_by_isbn(self, isbn: str) -> Optional[T]:
+        """根据 ISBN 获取单个对象"""
         pass
     
     @abstractmethod
@@ -33,6 +33,6 @@ class RepositoryInterface(ABC, Generic[T]):
         pass
     
     @abstractmethod
-    def count(self) -> int:
-        """统计总数"""
+    def count(self, keyword: str = '', status: str = '') -> int:
+        """统计总数（支持按关键词和状态筛选）"""
         pass

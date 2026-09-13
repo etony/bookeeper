@@ -2,7 +2,7 @@
 import os
 import tempfile
 import pytest
-from core.models.book import Book
+from models.book import Book
 from core.repositories.book_repo import BookRepository
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def test_create_book(temp_db):
     result = temp_db.create(book)
     assert result is True
     
-    retrieved = temp_db.get_by_id("9787544291163")
+    retrieved = temp_db.get_by_isbn("9787544291163")
     assert retrieved is not None
     assert retrieved.title == "百年孤独"
 
@@ -41,7 +41,7 @@ def test_update_book(temp_db):
     book.title = "Updated Title"
     temp_db.update(book)
     
-    retrieved = temp_db.get_by_id("111")
+    retrieved = temp_db.get_by_isbn("111")
     assert retrieved.title == "Updated Title"
 
 def test_delete_book(temp_db):
@@ -51,7 +51,7 @@ def test_delete_book(temp_db):
     result = temp_db.delete("111")
     assert result is True
     
-    retrieved = temp_db.get_by_id("111")
+    retrieved = temp_db.get_by_isbn("111")
     assert retrieved is None
 
 def test_upsert_book(temp_db):
@@ -61,7 +61,7 @@ def test_upsert_book(temp_db):
     book.title = "Updated"
     temp_db.upsert(book)
     
-    retrieved = temp_db.get_by_id("111")
+    retrieved = temp_db.get_by_isbn("111")
     assert retrieved.title == "Updated"
 
 def test_search_books(temp_db):

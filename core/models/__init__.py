@@ -1,4 +1,1 @@
-"""核心模型模块"""
-from .book import Book
-
-__all__ = ["Book"]
+"""核心模型模块 — 使用 models.book.Book"""

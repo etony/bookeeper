@@ -1,6 +1,6 @@
 """Book Repository 实现"""
 from typing import List, Optional
-from core.models.book import Book
+from models.book import Book
 from core.repositories.base import BaseRepository
 from core.exceptions import QueryError
 
@@ -38,7 +38,7 @@ class BookRepository(BaseRepository[Book]):
             conn.execute('CREATE INDEX IF NOT EXISTS idx_books_title ON books(title)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_books_status ON books(status)')
     
-    def get_by_id(self, isbn: str) -> Optional[Book]:
+    def get_by_isbn(self, isbn: str) -> Optional[Book]:
         """根据 ISBN 获取图书"""
         with self._conn() as conn:
             row = conn.execute('SELECT * FROM books WHERE isbn = ?', (isbn,)).fetchone()
@@ -115,6 +115,24 @@ class BookRepository(BaseRepository[Book]):
             rows = conn.execute(sql, params).fetchall()
             return [Book.from_dict(dict(r)) for r in rows]
     
+    def count(self, keyword: str = '', status: str = '') -> int:
+        """统计总数（支持按关键词和状态筛选）"""
+        clauses = []
+        params = []
+        if keyword:
+            clauses.append('(title LIKE ? OR author LIKE ? OR publisher LIKE ? OR isbn LIKE ?)')
+            kw = f'%{keyword}%'
+            params.extend([kw, kw, kw, kw])
+        if status:
+            clauses.append('status = ?')
+            params.append(status)
+        where = ' AND '.join(clauses)
+        if where:
+            where = 'WHERE ' + where
+        sql = f'SELECT COUNT(*) FROM books {where}'
+        with self._conn() as conn:
+            return conn.execute(sql, params).fetchone()[0]
+
     def status_counts(self) -> dict:
         """统计各状态数量"""
         with self._conn() as conn:
