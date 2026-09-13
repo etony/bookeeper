@@ -3,7 +3,7 @@ import sqlite3
 from contextlib import contextmanager
 from typing import List, Optional, TypeVar, Generic
 from config import get_config
-from core.exceptions import DatabaseConnectionError, QueryError
+from core.exceptions import QueryError
 
 T = TypeVar("T")
 
