@@ -1,19 +1,6 @@
 """Repository 测试"""
-import os
-import tempfile
 import pytest
 from core.models.book import Book
-from core.repositories.book_repo import BookRepository
-
-@pytest.fixture
-def temp_db():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-    
-    repo = BookRepository(db_path)
-    yield repo
-    
-    os.unlink(db_path)
 
 def test_create_book(temp_db):
     book = Book(isbn="9787544291163", title="百年孤独", author="加西亚·马尔克斯")
