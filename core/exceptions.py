@@ -15,7 +15,7 @@ class DatabaseError(BookeeperError):
     pass
 
 
-class ConnectionError(DatabaseError):
+class DatabaseConnectionError(DatabaseError):
     """数据库连接错误"""
     pass
 

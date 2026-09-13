@@ -2,7 +2,7 @@
 from .exceptions import (
     BookeeperError,
     DatabaseError,
-    ConnectionError,
+    DatabaseConnectionError,
     QueryError,
     ServiceError,
     DoubanAPIError,
@@ -14,7 +14,7 @@ from .exceptions import (
 __all__ = [
     "BookeeperError",
     "DatabaseError",
-    "ConnectionError",
+    "DatabaseConnectionError",
     "QueryError",
     "ServiceError",
     "DoubanAPIError",

@@ -3,7 +3,7 @@ import pytest
 from core.exceptions import (
     BookeeperError,
     DatabaseError,
-    ConnectionError,
+    DatabaseConnectionError,
     QueryError,
     ServiceError,
     DoubanAPIError,
@@ -24,7 +24,7 @@ def test_database_error():
     assert str(exc) == "数据库错误"
 
 def test_connection_error():
-    exc = ConnectionError("连接失败")
+    exc = DatabaseConnectionError("连接失败")
     assert isinstance(exc, DatabaseError)
     assert isinstance(exc, BookeeperError)
 
@@ -54,7 +54,7 @@ def test_validation_error():
 
 def test_exception_hierarchy():
     # 测试异常继承关系
-    assert issubclass(ConnectionError, DatabaseError)
+    assert issubclass(DatabaseConnectionError, DatabaseError)
     assert issubclass(QueryError, DatabaseError)
     assert issubclass(DoubanAPIError, ServiceError)
     assert issubclass(NetworkError, ServiceError)
