@@ -9,6 +9,70 @@ from .env import EnvLoader
 
 logger = logging.getLogger(__name__)
 
+
+class Config:
+    """
+    兼容旧版 Config 类的静态配置接口。
+    
+    用法：Config.DB_PATH、Config.WEB_PORT……
+    所有配置集中在此，方便统一修改和维护。
+    """
+    
+    # ── 应用基本信息 ──────────────────────────────────────────
+    APP_NAME = 'Bookeeper'
+    APP_VERSION = '3.0.0'
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'books.db')
+    
+    # ── 豆瓣 API ──────────────────────────────────────────────
+    DOUBAN_API_KEY = '0ab215a8b1977939201640fa14c66bab'
+    DOUBAN_API_KEY_SEARCH = '0ac44ae016490db2204ce0a042db2916'
+    DOUBAN_BOOK_URL = 'https://api.douban.com/v2/book'
+    DOUBAN_ISBN_URL = f'{DOUBAN_BOOK_URL}/isbn'
+    DOUBAN_SEARCH_URL = f'{DOUBAN_BOOK_URL}/search'
+    HEADERS = {
+        'Referer': 'https://m.douban.com/tv/american',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+                      'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
+    }
+    
+    # ── 界面尺寸与列定义 ──────────────────────────────────────
+    TABLE_COLUMNS = ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
+    MAIN_WINDOW_SIZE = (1000, 800)
+    SEARCH_DIALOG_SIZE = (700, 420)
+    DETAIL_DIALOG_SIZE = (580, 500)
+    
+    # ── 封面墙配置 ──────────────────────────────────────────
+    COVER_WALL_COLUMNS = 5
+    COVER_CARD_WIDTH = 150
+    COVER_CARD_HEIGHT = 230
+    
+    # ── 图书状态与书柜 ────────────────────────────────────────
+    STATUSES = ['默认', '计划', '已读']
+    DEFAULT_STATUS = '默认'
+    DEFAULT_SHELF = '未设置'
+    
+    # ── 网络与备份 ────────────────────────────────────────────
+    WEB_PORT = 8899
+    BACKUP_KEEP = 30
+    BACKUP_INTERVAL_MS = 300000
+    
+    @classmethod
+    def load_from_config_manager(cls, config_manager):
+        """从 ConfigManager 加载配置，覆盖默认值"""
+        config = config_manager.config
+        cls.APP_NAME = config.name
+        cls.APP_VERSION = config.version
+        cls.DB_PATH = config.database.path
+        cls.DOUBAN_API_KEY = config.douban.api_key
+        cls.DOUBAN_API_KEY_SEARCH = config.douban.api_key_search
+        cls.DOUBAN_BOOK_URL = config.douban.book_url
+        cls.DOUBAN_ISBN_URL = f'{config.douban.book_url}/isbn'
+        cls.DOUBAN_SEARCH_URL = f'{config.douban.book_url}/search'
+        cls.HEADERS = config.douban.headers
+        cls.WEB_PORT = config.web.port
+        cls.BACKUP_KEEP = config.backup.keep
+        cls.BACKUP_INTERVAL_MS = config.backup.interval_ms
+
 class ConfigManager:
     def __init__(self, config_path: str = None):
         self._config_path = config_path or "config.json"
