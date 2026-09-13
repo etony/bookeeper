@@ -1,5 +1,4 @@
 """数据模型测试"""
-import pytest
 from core.models.book import Book
 
 def test_book_creation():
