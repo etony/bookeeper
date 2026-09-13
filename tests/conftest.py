@@ -4,7 +4,6 @@ import sys
 import tempfile
 import pytest
 from config import init_config
-from core.repositories.book_repo import BookRepository
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -20,17 +19,6 @@ def test_config():
     yield
     
     os.unlink(config_path)
-
-@pytest.fixture
-def temp_db():
-    """临时数据库"""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-    
-    repo = BookRepository(db_path)
-    yield repo
-    
-    os.unlink(db_path)
 
 @pytest.fixture
 def sample_books():

@@ -52,7 +52,6 @@ def main():
   app.setStyleSheet(DARK_QSS)
 
   w = MainWindow()
-  from ui.icon import apply_window_icon
   apply_window_icon(w)
   w.show()
   sys.exit(app.exec())
