@@ -40,7 +40,11 @@ class Config:
   # ── 应用基本信息 ──────────────────────────────────────────
   APP_NAME = 'Bookeeper'
   APP_VERSION = '3.0.0'
-  DB_PATH = os.path.join(os.path.dirname(__file__), 'books.db')
+  # 支持环境变量覆盖数据库路径
+  DB_PATH = os.environ.get(
+    'BOOKEEPER_DATABASE_PATH',
+    os.path.join(os.path.dirname(__file__), 'books.db')
+  )
 
   # ── 豆瓣 API ──────────────────────────────────────────────
   # 豆瓣 v2 API 的 key 和端点 URL

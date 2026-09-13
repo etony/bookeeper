@@ -499,7 +499,10 @@ class BookWebServer:
     asyncio.set_event_loop(loop)
     # log_config=None：跳过 uvicorn 自带日志配置，避免无控制台（pythonw）下
     # sys.stdout 为 None 导致 formatter 配置失败；日志统一走应用根 logger
-    config = uvicorn.Config(self._app, host='127.0.0.1', port=Config.WEB_PORT,
+    # 支持环境变量覆盖监听地址
+    import os
+    host = os.environ.get('BOOKEEPER_WEB_HOST', '127.0.0.1')
+    config = uvicorn.Config(self._app, host=host, port=Config.WEB_PORT,
                             log_level='warning', log_config=None)
     self._server = uvicorn.Server(config)
     loop.run_until_complete(self._server.serve())
