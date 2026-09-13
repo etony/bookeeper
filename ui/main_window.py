@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config import Config
-from models.book import Book
+from core.models.book import Book
 from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService

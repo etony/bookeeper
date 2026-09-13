@@ -270,7 +270,7 @@ class BookWebServer:
                    status: str = Form('默认'), shelf: str = Form(''),
                    start_date: str = Form(''), end_date: str = Form('')):
       """提交添加图书表单"""
-      from models.book import Book
+      from core.models.book import Book
       book = Book(isbn=isbn, title=title, author=author, publisher=publisher,
                   price=price, rating=rating, status=status, shelf=shelf,
                   start_date=_valid_date(start_date), end_date=_valid_date(end_date))
@@ -388,7 +388,7 @@ class BookWebServer:
       if not book:
         return page('未找到', '<div class="msg msg-err">图书不存在</div>')
 
-      from models.book import Book as BookModel
+      from core.models.book import Book as BookModel
 
       # 如果缺少封面且之前没试过，尝试从豆瓣补充
       if not book.cover_url and isbn not in self._douban_tried:

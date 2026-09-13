@@ -1,6 +1,6 @@
 """Book Repository 实现"""
 from typing import List, Optional
-from models.book import Book
+from core.models.book import Book
 from core.repositories.base import BaseRepository
 from core.exceptions import QueryError
 

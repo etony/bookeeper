@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from config import Config
-from models.book import Book
+from core.models.book import Book
 from ui.theme import ACCENT
 
 

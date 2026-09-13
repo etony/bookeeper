@@ -2,7 +2,7 @@
 import os
 import tempfile
 import pytest
-from models.book import Book
+from core.models.book import Book
 from core.repositories.book_repo import BookRepository
 
 @pytest.fixture
