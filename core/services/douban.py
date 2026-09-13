@@ -6,18 +6,11 @@ from typing import List, Optional
 import requests
 from config import get_config
 from core.models.book import Book
-from core.exceptions import DoubanAPIError, NetworkError
 
 LOG = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY = 1.0
-
-HEADERS = {
-    "Referer": "https://m.douban.com/tv/american",
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
-                  "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-}
 
 def _request_with_retry(method: str, url: str, session: requests.Session, **kwargs) -> Optional[requests.Response]:
     """带指数退避重试的 HTTP 请求"""
@@ -38,7 +31,7 @@ class DoubanService:
     def __init__(self):
         config = get_config()
         self._session = requests.Session()
-        self._session.headers.update(HEADERS)
+        self._session.headers.update(config.douban.headers)
         self._api_key = config.douban.api_key
         self._api_key_search = config.douban.api_key_search
         self._isbn_url = f"{config.douban.book_url}/isbn"

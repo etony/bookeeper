@@ -54,6 +54,7 @@ class ConfigManager:
             "douban_api_key": config.douban.api_key,
             "douban_api_key_search": config.douban.api_key_search,
             "douban_book_url": config.douban.book_url,
+            "douban_headers": config.douban.headers,
             "database_path": config.database.path,
             "web_port": config.web.port,
             "web_host": config.web.host,
@@ -64,6 +65,12 @@ class ConfigManager:
     def _dict_to_config(self, data: Dict[str, Any]) -> AppConfig:
         from .defaults import DoubanConfig, DatabaseConfig, WebConfig, BackupConfig
         
+        headers = data.get("douban_headers", {
+            "Referer": "https://m.douban.com/tv/american",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
+                          "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+        })
+        
         return AppConfig(
             name=data.get("name", "Bookeeper"),
             version=data.get("version", "3.0.0"),
@@ -71,6 +78,7 @@ class ConfigManager:
                 api_key=data.get("douban_api_key", "0ab215a8b1977939201640fa14c66bab"),
                 api_key_search=data.get("douban_api_key_search", "0ac44ae016490db2204ce0a042db2916"),
                 book_url=data.get("douban_book_url", "https://api.douban.com/v2/book"),
+                headers=headers,
             ),
             database=DatabaseConfig(
                 path=data.get("database_path", "books.db"),

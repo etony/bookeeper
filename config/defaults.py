@@ -1,12 +1,17 @@
 # 默认配置值
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Dict
 
 @dataclass
 class DoubanConfig:
     api_key: str = "0ab215a8b1977939201640fa14c66bab"
     api_key_search: str = "0ac44ae016490db2204ce0a042db2916"
     book_url: str = "https://api.douban.com/v2/book"
+    headers: Dict[str, str] = field(default_factory=lambda: {
+        "Referer": "https://m.douban.com/tv/american",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
+                      "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+    })
 
 @dataclass
 class DatabaseConfig:
