@@ -1,10 +1,13 @@
 # 配置管理器
 import json
+import logging
 import os
 from typing import Dict, Any
 from .defaults import AppConfig, DEFAULT_CONFIG
 from .schema import DEFAULT_SCHEMA
 from .env import EnvLoader
+
+logger = logging.getLogger(__name__)
 
 class ConfigManager:
     def __init__(self, config_path: str = None):
@@ -20,16 +23,26 @@ class ConfigManager:
         
         # 2. 加载配置文件
         if os.path.exists(self._config_path):
-            with open(self._config_path, "r", encoding="utf-8") as f:
-                file_config = json.load(f)
-                config_data.update(file_config)
+            try:
+                with open(self._config_path, "r", encoding="utf-8") as f:
+                    file_config = json.load(f)
+                    config_data.update(file_config)
+            except json.JSONDecodeError as e:
+                logger.warning(f"配置文件格式错误: {e}，将使用默认配置")
+            except Exception as e:
+                logger.warning(f"加载配置文件失败: {e}，将使用默认配置")
         
         # 3. 加载环境变量
         env_config = EnvLoader.load()
         config_data.update(env_config)
         
         # 4. 验证配置
-        validated = DEFAULT_SCHEMA.validate(config_data)
+        try:
+            validated = DEFAULT_SCHEMA.validate(config_data)
+        except ValueError as e:
+            logger.warning(f"配置验证失败: {e}，将使用默认配置")
+            # 使用默认配置进行验证
+            validated = DEFAULT_SCHEMA.validate(self._config_to_dict(DEFAULT_CONFIG))
         
         # 5. 转换为 AppConfig 对象
         self._config = self._dict_to_config(validated)

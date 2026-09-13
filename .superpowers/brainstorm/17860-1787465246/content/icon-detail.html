@@ -1,0 +1,53 @@
+<h2>B 方案细化 — 字母 B 变体</h2>
+<p class="subtitle">品牌橙 #e8922a 背景 + 白色字母 B，圆角方块</p>
+
+<div class="cards">
+  <div class="card" data-choice="b1" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#e8922a;display:flex;align-items:center;justify-content:center;height:120px">
+      <span style="font-size:72px;font-weight:700;color:#fff;font-family:-apple-system,Arial">B</span>
+    </div>
+    <div class="card-body">
+      <h3>B1 — 纯字母 B</h3>
+      <p>圆角方块底 (#e8922a) + 白色粗体 B，简洁有力</p>
+    </div>
+  </div>
+  <div class="card" data-choice="b2" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#e8922a;display:flex;align-items:center;justify-content:center;height:120px">
+      <span style="font-size:72px;font-weight:700;color:#fff;font-family:Georgia,serif">B</span>
+    </div>
+    <div class="card-body">
+      <h3>B2 — 衬线体 B</h3>
+      <p>Georgia 衬线体，增添书卷气和辨识度</p>
+    </div>
+  </div>
+  <div class="card" data-choice="b3" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#e8922a;display:flex;align-items:center;justify-content:center;height:120px">
+      <span style="font-size:72px;font-weight:700;color:#fff;font-family:-apple-system,Arial">B</span>
+      <span style="font-size:14px;color:#fff;opacity:0.7;position:absolute;margin-top:80px">Bookeeper</span>
+    </div>
+    <div class="card-body">
+      <h3>B3 — B + Bookeeper 文字</h3>
+      <p>圆角方块 + B + 底部小字，信息更完整但更小尺寸可能看不清</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>技术实现路径</h3>
+  <div class="options">
+    <div class="option" data-choice="painter" onclick="toggleSelect(this)">
+      <div class="letter">I</div>
+      <div class="content">
+        <h3>QPainter 动态绘制（推荐）</h3>
+        <p>代码画图标，零外部依赖，支持所有尺寸（16/32/48/256），可同时生成 .ico 文件。项目已有 GUI 能力。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="pyside" onclick="toggleSelect(this)">
+      <div class="letter">II</div>
+      <div class="content">
+        <h3>预生成 .ico/.png 资源文件</h3>
+        <p>先生成图标文件，git 提交，启动时读取加载。更直观但多一步文件管理。</p>
+      </div>
+    </div>
+  </div>
+</div>
