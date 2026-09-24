@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import warnings
 from typing import Dict, Any
 from .defaults import AppConfig, DEFAULT_CONFIG
 from .schema import DEFAULT_SCHEMA
@@ -12,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """
-    兼容旧版 Config 类的静态配置接口。
+    兼容旧版 Config 类的静态配置接口（已废弃）。
     
+    请使用 ConfigManager 或 get_config() 代替。
     用法：Config.DB_PATH、Config.WEB_PORT……
     所有配置集中在此，方便统一修改和维护。
     """
@@ -58,7 +60,12 @@ class Config:
     
     @classmethod
     def load_from_config_manager(cls, config_manager):
-        """从 ConfigManager 加载配置，覆盖默认值"""
+        """从 ConfigManager 加载配置，覆盖默认值（已废弃，请直接使用 ConfigManager）"""
+        warnings.warn(
+            "Config.load_from_config_manager 已废弃，请直接使用 ConfigManager",
+            DeprecationWarning,
+            stacklevel=2
+        )
         config = config_manager.config
         cls.APP_NAME = config.name
         cls.APP_VERSION = config.version
@@ -167,11 +174,11 @@ class ConfigManager:
 # 全局配置实例
 _config_manager: ConfigManager = None
 
-def get_config() -> AppConfig:
+def get_config() -> ConfigManager:
     global _config_manager
     if _config_manager is None:
         _config_manager = ConfigManager()
-    return _config_manager.config
+    return _config_manager
 
 def init_config(config_path: str = None) -> ConfigManager:
     global _config_manager
