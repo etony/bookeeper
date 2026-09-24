@@ -142,10 +142,10 @@ class BackupService:
 
   def restore(self, backup_path: str) -> bool:
     """
-    从指定备份恢复数据库。
+    从指定备份恢复数据库（使用 sqlite3.backup 安全恢复）。
 
     恢复前先自动备份当前库（before_restore_时间戳.db），
-    然后用 shutil.copy2 覆盖 books.db。
+    然后用 sqlite3.backup 覆盖 books.db。
 
     返回 True 表示成功，False 表示失败。
     """
@@ -161,34 +161,29 @@ class BackupService:
       if os.path.exists(self._db_path):
         ts = time.strftime('%Y%m%d_%H%M%S')
         safety = os.path.join(backup_dir, f'before_restore_{ts}.db')
-        shutil.copy2(self._db_path, safety)
-        LOG.info('恢复前安全备份: %s', safety)
-    except (OSError, shutil.Error) as e:
+        src = sqlite3.connect(self._db_path)
+        dst = sqlite3.connect(safety)
+        try:
+          src.backup(dst)
+          LOG.info('恢复前安全备份: %s', safety)
+        finally:
+          dst.close()
+          src.close()
+    except sqlite3.Error as e:
       LOG.warning('安全备份失败（继续恢复）: %s', e)
 
     try:
-      # 先溶解当前库的 WAL，再覆盖，避免残留日志与恢复后的文件不匹配
+      # 用 sqlite3.backup 安全恢复，支持活动库
+      # backup() 在 source 上调用，destination 作为参数：source.backup(destination)
+      source = sqlite3.connect(backup_path)
+      destination = sqlite3.connect(self._db_path)
       try:
-        cur = sqlite3.connect(self._db_path)
-        try:
-          cur.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-          cur.execute('PRAGMA journal_mode=DELETE')
-        finally:
-          cur.close()
-      except sqlite3.Error as e:
-        LOG.warning('恢复前清理 WAL 失败（继续恢复）: %s', e)
-
-      shutil.copy2(backup_path, self._db_path)
-      # 尽力删掉残留 WAL/SHM；若被占用则忽略（下次连接会重建）
-      for suffix in ('-wal', '-shm'):
-        stale = self._db_path + suffix
-        try:
-          if os.path.exists(stale):
-            os.remove(stale)
-        except OSError:
-          pass
+        source.backup(destination)
+      finally:
+        source.close()
+        destination.close()
       LOG.info('恢复成功: %s → %s', backup_path, self._db_path)
       return True
-    except (OSError, shutil.Error) as e:
+    except sqlite3.Error as e:
       LOG.error('恢复失败: %s', e)
       return False

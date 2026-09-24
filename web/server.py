@@ -46,12 +46,14 @@ class BookWebServer:
   全部返回纯 HTML，不依赖 JavaScript。
   """
 
-  def __init__(self, on_started=None):
+  def __init__(self, on_started=None, on_data_changed=None):
     self._repo = get_repo()
     self._app = FastAPI(title='Bookeeper API')
     self._server = None
     # uvicorn 开始监听后的回调（在服务线程中调用）
     self._on_started = on_started
+    # 数据变更回调（Web端修改数据后通知GUI刷新）
+    self._on_data_changed = on_data_changed
     # 避免在详情页重复查询豆瓣 API（单次会话内有效）
     self._douban_tried = set()
     # 配置Jinja2模板
@@ -145,6 +147,8 @@ class BookWebServer:
                   price=price, rating=rating, status=status, shelf=shelf,
                   start_date=_valid_date(start_date), end_date=_valid_date(end_date))
       self._repo.upsert(book)
+      if self._on_data_changed:
+        self._on_data_changed()
       return RedirectResponse(url='/', status_code=302)
 
     @app.get('/edit/{isbn}', response_class=HTMLResponse)
@@ -211,12 +215,16 @@ class BookWebServer:
       book.start_date = _valid_date(start_date)
       book.end_date = _valid_date(end_date)
       self._repo.upsert(book)
+      if self._on_data_changed:
+        self._on_data_changed()
       return RedirectResponse(url='/', status_code=302)
 
     @app.post('/delete/{isbn}')
     def delete_book(isbn: str):
       """删除图书"""
       self._repo.delete(isbn)
+      if self._on_data_changed:
+        self._on_data_changed()
       return RedirectResponse(url='/', status_code=302)
 
     @app.get('/cover/{isbn}')

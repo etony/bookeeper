@@ -16,14 +16,16 @@ class _WebWorker(QObject):
   started = pyqtSignal()
   failed = pyqtSignal(str)
 
-  def __init__(self):
+  def __init__(self, on_data_changed=None):
     super().__init__()
     self._server = None
+    self._on_data_changed = on_data_changed
 
   def run(self):
     try:
       from web.server import BookWebServer
-      self._server = BookWebServer(on_started=self.started.emit)
+      self._server = BookWebServer(on_started=self.started.emit,
+                                   on_data_changed=self._on_data_changed)
       self._server.start()
     except Exception as e:
       self.failed.emit(str(e))
@@ -47,10 +49,11 @@ class WebManager(QObject):
   server_stopped = pyqtSignal()
   error_occurred = pyqtSignal(str)
 
-  def __init__(self, parent=None):
+  def __init__(self, parent=None, on_data_changed=None):
     super().__init__(parent)
     self._worker = None
     self._thread = None
+    self._on_data_changed = on_data_changed
 
   @property
   def is_running(self) -> bool:
@@ -63,7 +66,7 @@ class WebManager(QObject):
       return
 
     self._thread = QThread()
-    self._worker = _WebWorker()
+    self._worker = _WebWorker(on_data_changed=self._on_data_changed)
     self._worker.moveToThread(self._thread)
     self._thread.started.connect(self._worker.run)
     self._worker.started.connect(self._on_server_started)
@@ -84,7 +87,15 @@ class WebManager(QObject):
 
   def cleanup(self):
     """清理资源（关闭窗口时调用）"""
-    self.stop_server()
+    if self.is_running:
+      self._worker.stop()
+      self._thread.quit()
+      if not self._thread.wait(5000):  # 等待5秒
+        self._thread.terminate()  # 强制终止
+        self._thread.wait(1000)  # 再等1秒确保清理
+      self._worker = None
+      self._thread = None
+      self.server_stopped.emit()
 
   def _on_server_started(self):
     """服务启动成功回调"""

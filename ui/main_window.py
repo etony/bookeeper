@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
     self._load_settings()
 
     # 初始化 Web 管理器
-    self._web_manager = WebManager(self)
+    self._web_manager = WebManager(self, on_data_changed=self._on_web_data_changed)
     self._web_manager.server_started.connect(self._on_web_started)
     self._web_manager.server_stopped.connect(self._on_web_stopped)
     self._web_manager.error_occurred.connect(self._on_web_failed)
@@ -361,6 +361,11 @@ class MainWindow(QMainWindow):
 
   def _do_fetch_book(self, isbn: str):
     """实际执行豆瓣查询（异步）"""
+    # 先停止旧线程，防止快速重复调用时泄漏
+    if hasattr(self, '_fetch_thread') and self._fetch_thread and self._fetch_thread.isRunning():
+      self._fetch_thread.quit()
+      self._fetch_thread.wait(1000)
+
     # 创建 worker 和线程
     self._fetch_worker = _FetchBookWorker(self._api, isbn)
     self._fetch_thread = QThread()
@@ -411,10 +416,6 @@ class MainWindow(QMainWindow):
       QMessageBox.warning(self, '提示', '请至少填写 ISBN 或书名')
       return
     
-    # 获取当前选中行
-    selected = self._table.currentIndex()
-    row = selected.row() if selected.isValid() else -1
-    
     row_data = self._book_form.get_row_data()
     
     book = Book(
@@ -429,15 +430,8 @@ class MainWindow(QMainWindow):
       self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     
-    # 使用增量更新
-    if row >= 0:
-      self._model.update_row(row, row_data)
-      # 同步封面墙和状态栏
-      if hasattr(self, '_cover_wall'):
-        self._cover_wall.set_books(self._repo.get_all())
-      self._update_status()
-    else:
-      self._load_data()
+    # 全量刷新数据（排序后视觉行号可能已错位，不能用增量更新）
+    self._load_data()
     
     self.statusBar().showMessage('已更新')
 
@@ -704,6 +698,7 @@ class MainWindow(QMainWindow):
       return
     if self._backup_svc.restore(backup_path):
       self._dirty = False
+      self._undo_manager.clear()  # 清空撤销栈，避免回退到恢复前的状态
       self._load_data()
       QMessageBox.information(self, '提示', '恢复成功')
     else:
@@ -748,6 +743,12 @@ class MainWindow(QMainWindow):
     """Web 服务启动失败：恢复按钮状态"""
     self._toolbar.set_web_running(False)
     self.statusBar().showMessage(f'Web 服务启动失败: {msg}')
+
+  def _on_web_data_changed(self):
+    """Web端修改数据后通知GUI刷新"""
+    self._mark_dirty()
+    self._undo_manager.clear()  # Web端修改后清空撤销栈，避免回滚到不一致的状态
+    self._load_data()
 
   # ══════════════════════════════════════════════
   #  主题与设置
