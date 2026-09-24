@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
     """绑定所有 UI 控件的信号-槽连接"""
     # 书表单组件信号
     self._book_form.fetch_requested.connect(self._fetch_book)
-    self._book_form._btn_update.clicked.connect(self._update_book)
+    self._book_form.update_requested.connect(self._update_book)
     # 工具栏组件信号
     self._toolbar.import_requested.connect(self._load_csv)
     self._toolbar.export_requested.connect(self._save_csv)

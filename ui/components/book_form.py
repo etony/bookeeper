@@ -22,13 +22,13 @@ class BookFormWidget(QGroupBox):
 
   信号：
     fetch_requested(str)  — 用户点击"获取信息"或按回车，携带 ISBN
-    book_added(Book)      — 新增图书后
-    book_updated(Book)    — 更新图书后
+    book_selected(object) — 用户点击表格行选中图书
+    update_requested()    — 用户点击"更新记录"按钮
   """
 
   fetch_requested = pyqtSignal(str)
-  book_added = pyqtSignal(object)
-  book_updated = pyqtSignal(object)
+  book_selected = pyqtSignal(object)
+  update_requested = pyqtSignal()
 
   def __init__(self, parent=None):
     super().__init__('📖 图书信息', parent)
@@ -97,6 +97,7 @@ class BookFormWidget(QGroupBox):
     self._isbn_input.returnPressed.connect(self._on_fetch_clicked)
     self._btn_fetch.clicked.connect(self._on_fetch_clicked)
     self._btn_new.clicked.connect(self._on_new_clicked)
+    self._btn_update.clicked.connect(self.update_requested.emit)
     self._btn_clear.clicked.connect(self.clear_form)
     self._status_combo.currentTextChanged.connect(self._on_status_changed)
 
@@ -137,6 +138,10 @@ class BookFormWidget(QGroupBox):
       'start_date': self._get_date(self._start_date),
       'end_date': self._get_date(self._end_date),
     }
+
+  def set_form_data(self, row_data: list):
+    """用行列表数据填充表单（与 TABLE_COLUMNS 对应）"""
+    self.fill_from_row(row_data)
 
   def get_row_data(self) -> list:
     """从表单读取数据，返回行列表（与 TABLE_COLUMNS 对应）"""

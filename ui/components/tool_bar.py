@@ -14,6 +14,9 @@ class ToolBarWidget(QWidget):
   顶部工具栏：分组排列按钮，用分隔线区分功能区域。
 
   信号：
+    add_requested()        — 新增图书
+    update_requested()     — 更新图书
+    delete_requested()     — 删除图书
     import_requested()     — 加载 CSV
     export_requested()     — 保存 CSV
     stats_requested()      — 统计
@@ -25,6 +28,9 @@ class ToolBarWidget(QWidget):
     about_requested()      — 关于
   """
 
+  add_requested = pyqtSignal()
+  update_requested = pyqtSignal()
+  delete_requested = pyqtSignal()
   import_requested = pyqtSignal()
   export_requested = pyqtSignal()
   stats_requested = pyqtSignal()
@@ -112,10 +118,18 @@ class ToolBarWidget(QWidget):
     self._btn_stats.clicked.connect(self.stats_requested.emit)
     self._btn_search_douban.clicked.connect(self.douban_search_requested.emit)
     self._btn_cover_wall.clicked.connect(self.cover_wall_requested.emit)
-    self._btn_web.clicked.connect(self.web_toggled.emit)
+    self._btn_web.clicked.connect(self._on_web_toggled)
     self._btn_restore.clicked.connect(self.backup_requested.emit)
     self._btn_theme.clicked.connect(self.theme_toggled.emit)
     self._btn_about.clicked.connect(self.about_requested.emit)
+
+  # ══════════════════════════════════════════════
+  #  内部槽
+  # ══════════════════════════════════════════════
+
+  def _on_web_toggled(self):
+    """Web 服务按钮被点击"""
+    self.web_toggled.emit()
 
   # ══════════════════════════════════════════════
   #  公开方法
