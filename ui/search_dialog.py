@@ -151,12 +151,17 @@ class SearchDialog(QDialog):
     self._books = books
     if not books:
       QMessageBox.information(self, '搜索结果', '未找到匹配的图书')
+      return
     model = QStandardItemModel(len(books), 9)
     model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])
     for r, book in enumerate(books):
       for c, val in enumerate(book.to_row()):
         model.setItem(r, c, QStandardItem(str(val)))
     self._table.setModel(model)
+    # 聚焦到表格，支持键盘导航
+    self._table.setFocus()
+    if self._table.model().rowCount() > 0:
+      self._table.selectRow(0)
 
   def _on_error(self, msg):
     """搜索失败回调"""

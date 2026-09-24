@@ -46,11 +46,10 @@ class BookFormWidget(QGroupBox):
     self._isbn_input.setPlaceholderText('输入 ISBN（回车即查询豆瓣）')
     r0.addWidget(self._isbn_input, stretch=1)
     self._btn_fetch = QPushButton('🌐 获取信息')
-    self._btn_new = QPushButton('➕ 新增')
-    self._btn_new.setToolTip('清空表单，手动添加新图书')
+    self._btn_new_clear = QPushButton('➕ 新增')
+    self._btn_new_clear.setToolTip('清空表单，手动添加新图书')
     self._btn_update = QPushButton('💾 更新记录')
-    self._btn_clear = QPushButton('✕ 清空')
-    for btn in (self._btn_fetch, self._btn_new, self._btn_update, self._btn_clear):
+    for btn in (self._btn_fetch, self._btn_new_clear, self._btn_update):
       btn.setFixedHeight(34)
       r0.addWidget(btn)
     layout.addLayout(r0)
@@ -94,9 +93,8 @@ class BookFormWidget(QGroupBox):
     # ── 信号绑定 ───────────────────────────────────────
     self._isbn_input.returnPressed.connect(self._on_fetch_clicked)
     self._btn_fetch.clicked.connect(self._on_fetch_clicked)
-    self._btn_new.clicked.connect(self._on_new_clicked)
+    self._btn_new_clear.clicked.connect(self._on_new_clear_clicked)
     self._btn_update.clicked.connect(self.update_requested.emit)
-    self._btn_clear.clicked.connect(self.clear_form)
     self._status_combo.currentTextChanged.connect(self._on_status_changed)
 
   # ══════════════════════════════════════════════
@@ -210,10 +208,21 @@ class BookFormWidget(QGroupBox):
     if isbn:
       self.fetch_requested.emit(isbn)
 
-  def _on_new_clicked(self):
-    """新增按钮被点击：清空表单并聚焦书名"""
-    self.clear_form()
-    self._title_input.setFocus()
+  def _on_new_clear_clicked(self):
+    """新增/清空按钮被点击：根据表单状态决定行为"""
+    # 检查表单是否有内容
+    has_content = bool(self._isbn_input.text().strip() or 
+                      self._title_input.text().strip() or
+                      self._author_input.text().strip())
+    
+    if has_content:
+      # 有内容时清空表单
+      self.clear_form()
+      self._isbn_input.setFocus()
+    else:
+      # 无内容时聚焦书名（准备手动输入）
+      self.clear_form()
+      self._title_input.setFocus()
 
   def _on_status_changed(self, text: str):
     """状态设为'已读'时自动填入日期，切回非'已读'时重置"""

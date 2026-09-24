@@ -55,21 +55,23 @@ class ToolBarWidget(QWidget):
       line.setStyleSheet(f'color: {c};')
       row.addWidget(line)
 
-    from ui.icon import make_theme_icon, make_about_icon
+    from ui.icon import (make_theme_icon, make_about_icon, make_import_icon,
+                         make_export_icon, make_stats_icon, make_search_icon,
+                         make_cover_icon, make_web_icon, make_restore_icon)
 
-    self._btn_load = QPushButton('📂 加载 CSV')
+    self._btn_load = QPushButton(make_import_icon(), ' 加载 CSV')
     self._btn_load.setToolTip('从 CSV 导入图书数据')
-    self._btn_save = QPushButton('💾 保存 CSV')
+    self._btn_save = QPushButton(make_export_icon(), ' 保存 CSV')
     self._btn_save.setToolTip('导出全部数据为 CSV')
-    self._btn_stats = QPushButton('📊 统计')
+    self._btn_stats = QPushButton(make_stats_icon(), ' 统计')
     self._btn_stats.setToolTip('查看图书统计信息')
-    self._btn_search_douban = QPushButton('🌐 豆瓣搜索')
+    self._btn_search_douban = QPushButton(make_search_icon(), ' 豆瓣搜索')
     self._btn_search_douban.setToolTip('从豆瓣搜索图书并添加 (Ctrl+D)')
-    self._btn_cover_wall = QPushButton('🖼️ 封面墙')
+    self._btn_cover_wall = QPushButton(make_cover_icon(), ' 封面墙')
     self._btn_cover_wall.setToolTip('切换到封面墙视图 (Ctrl+W)')
-    self._btn_web = QPushButton('🌐 Web 服务')
+    self._btn_web = QPushButton(make_web_icon(), ' Web 服务')
     self._btn_web.setToolTip('启动/停止内嵌 Web 服务')
-    self._btn_restore = QPushButton('⏪ 恢复')
+    self._btn_restore = QPushButton(make_restore_icon(), ' 恢复')
     self._btn_restore.setToolTip('从备份恢复数据库')
     self._btn_theme = QPushButton(make_theme_icon(self._dark_mode), '')
     self._btn_theme.setFixedSize(38, 34)

@@ -13,7 +13,7 @@ import base64
 import webbrowser
 
 import pandas as pd
-from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, QByteArray
+from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, QByteArray, pyqtSignal
 from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout,
@@ -93,6 +93,16 @@ class MainWindow(QMainWindow):
 
     self._toolbar = ToolBarWidget(self._dark_mode)
     layout.addWidget(self._toolbar)
+
+    # 表单折叠按钮
+    from PyQt6.QtWidgets import QToolButton
+    self._form_toggle = QToolButton('📖 图书信息 ▾')
+    self._form_toggle.setCheckable(True)
+    self._form_toggle.setChecked(True)
+    self._form_toggle.setStyleSheet('QToolButton { border: none; font-weight: bold; padding: 4px; }')
+    self._form_toggle.toggled.connect(self._toggle_form)
+    layout.addWidget(self._form_toggle)
+
     self._book_form = BookFormWidget()
     layout.addWidget(self._book_form)
     self._search_bar = SearchBarWidget()
@@ -111,7 +121,7 @@ class MainWindow(QMainWindow):
     self._table.setAlternatingRowColors(True)
     self._table.setSortingEnabled(True)
     self._table.verticalHeader().setVisible(False)
-    self._table.verticalHeader().setDefaultSectionSize(30)
+    self._table.verticalHeader().setDefaultSectionSize(34)
     hdr = self._table.horizontalHeader()
     hdr.setSectionsMovable(True)
     hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -136,6 +146,11 @@ class MainWindow(QMainWindow):
     sb.setFont(QFont('', 11))
     sb.showMessage('欢迎使用 Bookeeper')
     self.setStatusBar(sb)
+
+  def _toggle_form(self, checked: bool):
+    """切换表单显示/隐藏"""
+    self._book_form.setVisible(checked)
+    self._form_toggle.setText('📖 图书信息 ▾' if checked else '📖 图书信息 ▸')
 
   # ══════════════════════════════════════════════
   #  数据模型
@@ -340,29 +355,30 @@ class MainWindow(QMainWindow):
     self._book_form.set_fetch_text('⏳ 查询中...')
     self.statusBar().showMessage('正在查询豆瓣...')
 
-    # 使用 QTimer.singleShot 模拟异步（实际仍是同步，但界面会更新）
-    QTimer.singleShot(50, lambda: self._do_fetch_book(raw_isbn))
+    # 异步执行查询
+    self._do_fetch_book(raw_isbn)
 
   def _do_fetch_book(self, isbn: str):
-    """实际执行豆瓣查询"""
-    try:
-      book = self._api.get_book_by_isbn(isbn)
-    except Exception as e:
-      # 恢复按钮状态
-      self._book_form.set_fetch_enabled(True)
-      self._book_form.set_fetch_text('🌐 获取信息')
-      QMessageBox.warning(self, '错误', f'查询出错: {e}')
-      self.statusBar().showMessage('查询失败')
-      return
+    """实际执行豆瓣查询（异步）"""
+    # 创建 worker 和线程
+    self._fetch_worker = _FetchBookWorker(self._api, isbn)
+    self._fetch_thread = QThread()
+    self._fetch_worker.moveToThread(self._fetch_thread)
 
+    # 连接信号
+    self._fetch_worker.finished.connect(self._on_fetch_success)
+    self._fetch_worker.failed.connect(self._on_fetch_error)
+    self._fetch_thread.finished.connect(self._fetch_thread.deleteLater)
+
+    # 启动查询
+    self._fetch_thread.started.connect(self._fetch_worker.run)
+    self._fetch_thread.start()
+
+  def _on_fetch_success(self, book):
+    """豆瓣查询成功回调"""
     # 恢复按钮状态
     self._book_form.set_fetch_enabled(True)
     self._book_form.set_fetch_text('🌐 获取信息')
-
-    if not book:
-      QMessageBox.warning(self, '错误', f'未找到图书: {isbn}')
-      self.statusBar().showMessage('查询失败')
-      return
 
     self._merge_user_fields(book)
     self._book_form.fill_form(book)
@@ -375,6 +391,14 @@ class MainWindow(QMainWindow):
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
+
+  def _on_fetch_error(self, error_msg: str):
+    """豆瓣查询失败回调"""
+    # 恢复按钮状态
+    self._book_form.set_fetch_enabled(True)
+    self._book_form.set_fetch_text('🌐 获取信息')
+    QMessageBox.warning(self, '错误', f'查询出错: {error_msg}')
+    self.statusBar().showMessage('查询失败')
 
   def _update_book(self):
     """
@@ -825,13 +849,20 @@ class MainWindow(QMainWindow):
     hdr.sectionResized.connect(self._save_header_state)
 
   def _update_status(self):
-    """更新状态栏：显示记录总数和当前筛选数"""
+    """更新状态栏：显示记录总数、Web状态和版本"""
     total = self._repo.count()
     visible = self._model.rowCount()
     txt = f'共 {total} 条记录'
     if visible != total and total > 0:
       txt = f'已筛选 {visible}/{total} 条记录'
-    self.statusBar().showMessage(f'{txt}  |  {Config.APP_NAME} v{Config.APP_VERSION}')
+
+    # Web服务状态
+    web_status = '● Web 运行中' if self._web_manager.is_running else '○ Web 已停止'
+
+    # 主题模式
+    theme_mode = '暗色' if self._dark_mode else '亮色'
+
+    self.statusBar().showMessage(f'{txt}  |  {web_status}  |  {theme_mode}  |  {Config.APP_NAME} v{Config.APP_VERSION}')
 
   # ══════════════════════════════════════════════
   #  辅助
@@ -845,6 +876,32 @@ class MainWindow(QMainWindow):
       book.shelf = existing.shelf
       book.start_date = existing.start_date
       book.end_date = existing.end_date
+
+
+class _FetchBookWorker(QObject):
+  """
+  后台查询豆瓣图书的工作线程。
+
+  在独立线程中执行 ISBN 查询，避免 UI 卡死。
+  """
+
+  finished = pyqtSignal(object)   # 查询成功，传回 Book 对象
+  failed = pyqtSignal(str)        # 查询失败，传回错误消息
+
+  def __init__(self, api, isbn):
+    super().__init__()
+    self._api = api
+    self._isbn = isbn
+
+  def run(self):
+    try:
+      book = self._api.get_book_by_isbn(self._isbn)
+      if book:
+        self.finished.emit(book)
+      else:
+        self.failed.emit(f'未找到图书: {self._isbn}')
+    except Exception as e:
+      self.failed.emit(str(e))
 
 
 class _ImportWorker(QObject):

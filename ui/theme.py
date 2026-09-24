@@ -17,6 +17,7 @@ QPushButton {
 }
 QPushButton:hover { border-color: #e8922a; }
 QPushButton:pressed { padding-top: 7px; padding-bottom: 5px; }
+QPushButton:focus { outline: none; border: 2px solid #e8922a; }
 QGroupBox {
   border: 1px solid; border-radius: 8px; margin-top: 6px;
   padding-top: 14px; padding-bottom: 6px; padding-left: 8px; padding-right: 8px;
@@ -27,6 +28,7 @@ QGroupBox::title {
 }
 QTableView { border: 1px solid; border-radius: 6px; outline: none; }
 QTableView::item { padding: 4px 8px; }
+QTableView:focus { border: 2px solid #e8922a; }
 QHeaderView::section {
   border: none; padding: 6px 10px; font-weight: 600;
 }

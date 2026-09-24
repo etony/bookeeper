@@ -83,49 +83,52 @@ class DetailDialog(QDialog):
     """
     构建界面布局。
 
+    顶：翻页按钮 + 页码指示器
     左：封面图（200×280）
     右：图书信息（QTextBrowser 支持 HTML 渲染）
-    底：上一本 / 下一本 翻页按钮
     """
     self.setWindowTitle('图书详情')
     self.resize(*Config.DETAIL_DIALOG_SIZE)
-    layout = QHBoxLayout(self)
+    layout = QVBoxLayout(self)
     layout.setContentsMargins(*DIALOG_MARGINS)
     layout.setSpacing(DIALOG_SPACING)
 
-    # ── 左侧：封面 ──────────────────────────────────────
+    # ── 顶部：翻页按钮 + 页码 ───────────────────────────
+    nav = QHBoxLayout()
+    nav.setSpacing(DIALOG_SPACING)
+    self._prev_btn = QPushButton('◀ 上一本')
+    self._next_btn = QPushButton('下一本 ▶')
+    self._page_label = QLabel('')
+    self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self._prev_btn.setToolTip('查看上一本图书')
+    self._next_btn.setToolTip('查看下一本图书')
+    self._prev_btn.clicked.connect(self._prev)
+    self._next_btn.clicked.connect(self._next)
+    nav.addWidget(self._prev_btn)
+    nav.addWidget(self._page_label, stretch=1)
+    nav.addWidget(self._next_btn)
+    layout.addLayout(nav)
+
+    # ── 内容区：封面 + 信息 ──────────────────────────────
+    content = QHBoxLayout()
+    content.setSpacing(DIALOG_SPACING)
+
+    # 左侧：封面
     self._cover = QLabel('无封面')
     self._cover.setFixedSize(200, 280)
     self._cover.setScaledContents(True)
     self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self._cover.setStyleSheet(
       'border: 1px solid; border-radius: 4px; font-size: 13px;')
-    layout.addWidget(self._cover)
+    content.addWidget(self._cover)
 
-    # ── 右侧：信息 + 翻页按钮 ───────────────────────────
-    right = QVBoxLayout()
-    right.setSpacing(DIALOG_SPACING)
-
+    # 右侧：信息
     self._info = QTextBrowser()
     self._info.setOpenExternalLinks(True)    # 点击链接自动在浏览器打开
     self._info.setMinimumWidth(300)
-    right.addWidget(self._info)
+    content.addWidget(self._info)
 
-    nav = QHBoxLayout()
-    nav.setSpacing(DIALOG_SPACING)
-    self._prev_btn = QPushButton('◀ 上一本')
-    self._next_btn = QPushButton('下一本 ▶')
-    self._prev_btn.setToolTip('查看上一本图书')
-    self._next_btn.setToolTip('查看下一本图书')
-    self._prev_btn.clicked.connect(self._prev)
-    self._next_btn.clicked.connect(self._next)
-    nav.addStretch()
-    nav.addWidget(self._prev_btn)
-    nav.addWidget(self._next_btn)
-    nav.addStretch()
-    right.addLayout(nav)
-
-    layout.addLayout(right)
+    layout.addLayout(content, stretch=1)
 
   def _load_current(self):
     """
@@ -145,6 +148,7 @@ class DetailDialog(QDialog):
 
     self._prev_btn.setEnabled(len(self._isbn_list) > 1)
     self._next_btn.setEnabled(len(self._isbn_list) > 1)
+    self._page_label.setText(f'{self._index + 1} / {len(self._isbn_list)}')
 
     isbn = self._isbn_list[self._index % len(self._isbn_list)]
 

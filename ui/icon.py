@@ -164,6 +164,59 @@ def make_about_icon() -> QIcon:
   return QIcon(pm)
 
 
+def _make_text_icon(text: str, color: str = '#8a8a8a') -> QIcon:
+  """生成带文字的简易图标"""
+  size = 20
+  pm = QPixmap(size, size)
+  pm.setDevicePixelRatio(1.0)
+  pm.fill(Qt.GlobalColor.transparent)
+  painter = QPainter(pm)
+  painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+  font = QFont('Arial')
+  font.setPixelSize(14)
+  font.setBold(True)
+  painter.setFont(font)
+  painter.setPen(QColor(color))
+  painter.drawText(QRectF(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, text)
+  painter.end()
+  return QIcon(pm)
+
+
+def make_import_icon() -> QIcon:
+  """导入图标：↓"""
+  return _make_text_icon('↓', '#4a9')
+
+
+def make_export_icon() -> QIcon:
+  """导出图标：↑"""
+  return _make_text_icon('↑', '#58a')
+
+
+def make_stats_icon() -> QIcon:
+  """统计图标：∑"""
+  return _make_text_icon('∑', '#e8922a')
+
+
+def make_search_icon() -> QIcon:
+  """搜索图标：🔍"""
+  return _make_text_icon('Q', '#5a8')
+
+
+def make_cover_icon() -> QIcon:
+  """封面墙图标：▦"""
+  return _make_text_icon('▦', '#6a8')
+
+
+def make_web_icon() -> QIcon:
+  """Web服务图标：◎"""
+  return _make_text_icon('◎', '#5a8')
+
+
+def make_restore_icon() -> QIcon:
+  """恢复图标：↺"""
+  return _make_text_icon('↺', '#8a8a8a')
+
+
 def set_app_user_model_id():
   """设置 Windows AppUserModelID，必须在第一个窗口创建之前调用。"""
   if os.name != 'nt':

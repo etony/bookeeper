@@ -24,6 +24,17 @@ from core.models.book import Book
 from ui.theme import ACCENT
 
 
+def _is_dark_theme() -> bool:
+  """检测当前是否为暗色主题"""
+  from PyQt6.QtWidgets import QApplication
+  app = QApplication.instance()
+  if not app:
+    return True  # 默认暗色
+  palette = app.palette()
+  bg = palette.color(palette.ColorRole.Window)
+  return bg.lightness() < 128
+
+
 class CoverDownloadPool:
     """封面下载线程池，限制并发数量"""
 
@@ -115,7 +126,10 @@ class CoverCard(QFrame):
         self._cover_label = QLabel('加载中...')
         self._cover_label.setFixedSize(140, 180)
         self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cover_label.setStyleSheet('border: 1px solid #3a3a40; border-radius: 4px; background-color: #2c2c31;')
+        dark = _is_dark_theme()
+        cover_border = '#3a3a40' if dark else '#d8d6d0'
+        cover_bg = '#2c2c31' if dark else '#f0eeea'
+        self._cover_label.setStyleSheet(f'border: 1px solid {cover_border}; border-radius: 4px; background-color: {cover_bg};')
         layout.addWidget(self._cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # 书名
@@ -145,10 +159,13 @@ class CoverCard(QFrame):
     def _update_style(self, hovered: bool):
         """更新卡片边框样式（跟随主题）"""
         from ui.theme import ACCENT
+        dark = _is_dark_theme()
+        bg = '#2a2a2e' if dark else '#ffffff'
+        border = '#3a3a40' if dark else '#d8d6d0'
         if hovered:
-            self.setStyleSheet(f'QFrame {{ border: 2px solid {ACCENT}; border-radius: 6px; background-color: #2a2a2e; }}')
+            self.setStyleSheet(f'QFrame {{ border: 2px solid {ACCENT}; border-radius: 6px; background-color: {bg}; }}')
         else:
-            self.setStyleSheet('QFrame { border: 1px solid #3a3a40; border-radius: 6px; background-color: #2a2a2e; }')
+            self.setStyleSheet(f'QFrame {{ border: 1px solid {border}; border-radius: 6px; background-color: {bg}; }}')
 
     def _load_cover(self):
         """加载封面图片"""
@@ -250,6 +267,7 @@ class CoverWallWidget(QWidget):
         self._books: List[Book] = []
         self._cards: List[CoverCard] = []
         self._columns = 5  # 每行显示的图书数量
+        self._empty_label = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -280,7 +298,9 @@ class CoverWallWidget(QWidget):
 
         toolbar.addStretch()
         self._count_label = QLabel('')
-        self._count_label.setStyleSheet('color: #9a9aa0; font-size: 12px;')
+        dark = _is_dark_theme()
+        label_color = '#9a9aa0' if dark else '#6a6a6a'
+        self._count_label.setStyleSheet(f'color: {label_color}; font-size: 12px;')
         toolbar.addWidget(self._count_label)
 
         layout.addLayout(toolbar)
@@ -318,6 +338,23 @@ class CoverWallWidget(QWidget):
             card.setParent(None)
             card.deleteLater()
         self._cards.clear()
+
+        # 清空空状态提示
+        if hasattr(self, '_empty_label') and self._empty_label:
+            self._empty_label.setParent(None)
+            self._empty_label.deleteLater()
+            self._empty_label = None
+
+        # 空状态提示
+        if not self._books:
+            dark = _is_dark_theme()
+            text_color = '#9a9aa0' if dark else '#6a6a6a'
+            self._empty_label = QLabel('暂无图书，点击工具栏添加')
+            self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._empty_label.setStyleSheet(f'color: {text_color}; font-size: 14px; padding: 40px;')
+            self._grid_layout.addWidget(self._empty_label, 0, 0, 1, self._columns)
+            self._count_label.setText('共 0 本')
+            return
 
         # 排序
         sorted_books = self._sort_books(self._books)
