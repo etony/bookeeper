@@ -25,7 +25,7 @@
         {% endif %}
         
         <div class="info">
-            <div class="title">{{ book.title[:15] }}{% if book.title|length > 15 %}...{% endif %}</div>
+            <div class="title">{{ (book.title or '')[:15] }}{% if (book.title or '')|length > 15 %}...{% endif %}</div>
             <div class="meta">
                 <span class="status status-{{ book.status if book.status in ['已读', '计划'] else '默认' }}">{{ book.status }}</span>
                 {% if book.rating and book.rating != '0' %}
@@ -37,3 +37,4 @@
     {% endfor %}
 </div>
 {% endblock %}
+

@@ -162,6 +162,7 @@ class BookWebServer:
         })
 
       msg = ''
+      msg_type = ''
       if sync == '1':
         from services.douban import DoubanService
         api_book = DoubanService().get_book_by_isbn(isbn)
@@ -186,7 +187,7 @@ class BookWebServer:
       return self._templates.TemplateResponse(request, "edit.html", {
         "book": book,
         "msg": msg,
-        "msg_type": msg_type if msg else '',
+        "msg_type": msg_type,
         "statuses": Config.STATUSES,
       })
 
@@ -300,8 +301,8 @@ class BookWebServer:
       pubs = self._repo.publisher_top(10)
       dist = self._repo.rating_distribution()
 
-      status_total = sum(status_counts.values()) if status_counts else 0
-      pubs_max = pubs[0][1] if pubs else 1
+      status_total = max(1, sum(status_counts.values())) if status_counts else 1
+      pubs_max = max(1, pubs[0][1]) if pubs else 1
       dist_max = max(dist.values()) if dist else 0
       charts_exist = bool(status_counts or pubs or any(dist.values()))
 

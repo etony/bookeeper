@@ -51,8 +51,9 @@
         {% if p == page_no %}
             <span class="active">{{ p }}</span>
         {% else %}
-            <a href="/?q={{ q }}&page={{ p }}">{{ p }}</a>
+            <a href="/?q={{ q|urlencode }}&page={{ p }}">{{ p }}</a>
         {% endif %}
     {% endfor %}
 </div>
 {% endblock %}
+
