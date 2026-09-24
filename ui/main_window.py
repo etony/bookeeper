@@ -96,7 +96,8 @@ class MainWindow(QMainWindow):
 
     # 表单折叠按钮
     from PyQt6.QtWidgets import QToolButton
-    self._form_toggle = QToolButton('📖 图书信息 ▾')
+    self._form_toggle = QToolButton()
+    self._form_toggle.setText('📖 图书信息 ▾')
     self._form_toggle.setCheckable(True)
     self._form_toggle.setChecked(True)
     self._form_toggle.setStyleSheet('QToolButton { border: none; font-weight: bold; padding: 4px; }')
