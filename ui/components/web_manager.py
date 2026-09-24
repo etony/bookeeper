@@ -84,12 +84,7 @@ class WebManager(QObject):
 
   def cleanup(self):
     """清理资源（关闭窗口时调用）"""
-    if self.is_running:
-      self._worker.stop()
-      self._thread.quit()
-      self._thread.wait(3000)
-      self._worker = None
-      self._thread = None
+    self.stop_server()
 
   def _on_server_started(self):
     """服务启动成功回调"""
@@ -97,6 +92,8 @@ class WebManager(QObject):
 
   def _on_error(self, msg: str):
     """服务启动失败回调"""
+    self._thread.quit()
+    self._thread.wait(3000)
     self._worker = None
     self._thread = None
     self.error_occurred.emit(msg)

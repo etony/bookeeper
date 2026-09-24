@@ -22,12 +22,10 @@ class BookFormWidget(QGroupBox):
 
   信号：
     fetch_requested(str)  — 用户点击"获取信息"或按回车，携带 ISBN
-    book_selected(object) — 用户点击表格行选中图书
     update_requested()    — 用户点击"更新记录"按钮
   """
 
   fetch_requested = pyqtSignal(str)
-  book_selected = pyqtSignal(object)
   update_requested = pyqtSignal()
 
   def __init__(self, parent=None):
@@ -116,10 +114,6 @@ class BookFormWidget(QGroupBox):
   def set_fetch_text(self, text: str):
     """设置获取按钮的文字"""
     self._btn_fetch.setText(text)
-
-  def set_update_enabled(self, enabled: bool):
-    """设置更新按钮的启用状态"""
-    self._btn_update.setEnabled(enabled)
 
   def get_form_data(self) -> dict:
     """从表单读取数据，返回字典"""

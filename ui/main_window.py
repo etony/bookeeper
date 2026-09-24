@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
     """封面墙选中图书事件"""
     book = self._repo.get_by_isbn(isbn)
     if book:
-      self._fill_form(book)
+      self._book_form.fill_form(book)
 
   def _on_cover_wall_opened(self, isbn: str):
     """封面墙双击打开图书详情事件"""
@@ -214,7 +214,7 @@ class MainWindow(QMainWindow):
     elif action == edit_action:
       book = self._repo.get_by_isbn(isbn)
       if book:
-        self._fill_form(book)
+        self._book_form.fill_form(book)
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
@@ -376,10 +376,6 @@ class MainWindow(QMainWindow):
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
 
-  def _fill_form(self, book: Book):
-    """将 Book 对象填充到表单各控件"""
-    self._book_form.fill_form(book)
-
   def _update_book(self):
     """
     从表单读取数据，更新到数据库（使用增量更新）。
@@ -419,15 +415,6 @@ class MainWindow(QMainWindow):
       self._load_data()
     
     self.statusBar().showMessage('已更新')
-
-  def _clear_form(self):
-    """清空表单所有输入，聚焦到 ISBN 输入框"""
-    self._book_form.clear_form()
-
-  def _new_book(self):
-    """清空表单，聚焦到书名输入框，方便手动添加新图书"""
-    self._book_form.clear_form()
-    self._book_form.focus_title()
 
   def _on_row_clicked(self, index):
     """点击表格行时，将选中行数据填充到表单"""
@@ -573,7 +560,7 @@ class MainWindow(QMainWindow):
     # 如果是新书（ISBN不存在）且购书日期为空，设置为当前日期
     if not book.start_date:
       book.start_date = QDate.currentDate().toString('yyyy-MM-dd')
-    self._fill_form(book)
+    self._book_form.fill_form(book)
     # 已存在的书走 Update，否则撤销会误删整条记录
     old_book = self._repo.get_by_isbn(book.isbn)
     if old_book:

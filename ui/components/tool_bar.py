@@ -14,9 +14,6 @@ class ToolBarWidget(QWidget):
   顶部工具栏：分组排列按钮，用分隔线区分功能区域。
 
   信号：
-    add_requested()        — 新增图书
-    update_requested()     — 更新图书
-    delete_requested()     — 删除图书
     import_requested()     — 加载 CSV
     export_requested()     — 保存 CSV
     stats_requested()      — 统计
@@ -28,9 +25,6 @@ class ToolBarWidget(QWidget):
     about_requested()      — 关于
   """
 
-  add_requested = pyqtSignal()
-  update_requested = pyqtSignal()
-  delete_requested = pyqtSignal()
   import_requested = pyqtSignal()
   export_requested = pyqtSignal()
   stats_requested = pyqtSignal()
