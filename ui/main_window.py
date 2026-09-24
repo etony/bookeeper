@@ -68,10 +68,11 @@ class MainWindow(QMainWindow):
     self._load_settings()
 
     # 初始化 Web 管理器
-    self._web_manager = WebManager(self, on_data_changed=self._on_web_data_changed)
+    self._web_manager = WebManager(self)
     self._web_manager.server_started.connect(self._on_web_started)
     self._web_manager.server_stopped.connect(self._on_web_stopped)
     self._web_manager.error_occurred.connect(self._on_web_failed)
+    self._web_manager.data_changed.connect(self._on_web_data_changed)  # 安全跨线程投递
 
   # ══════════════════════════════════════════════
   #  UI 构建
@@ -905,6 +906,9 @@ class _FetchBookWorker(QObject):
         self.failed.emit(f'未找到图书: {self._isbn}')
     except Exception as e:
       self.failed.emit(str(e))
+    finally:
+      # 退出线程事件循环，确保线程正常结束
+      QThread.currentThread().quit()
 
 
 class _ImportWorker(QObject):

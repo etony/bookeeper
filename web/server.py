@@ -182,6 +182,8 @@ class BookWebServer:
           book.douban_url = api_book.douban_url
           book.pages = api_book.pages
           self._repo.upsert(book)
+          if self._on_data_changed:
+            self._on_data_changed()
           msg = '已从豆瓣同步图书信息'
           msg_type = 'info'
         else:

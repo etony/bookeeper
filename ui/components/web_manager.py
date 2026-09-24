@@ -15,17 +15,17 @@ class _WebWorker(QObject):
 
   started = pyqtSignal()
   failed = pyqtSignal(str)
+  data_changed = pyqtSignal()  # Web端数据变更信号（从Web线程安全投递到主线程）
 
-  def __init__(self, on_data_changed=None):
+  def __init__(self):
     super().__init__()
     self._server = None
-    self._on_data_changed = on_data_changed
 
   def run(self):
     try:
       from web.server import BookWebServer
       self._server = BookWebServer(on_started=self.started.emit,
-                                   on_data_changed=self._on_data_changed)
+                                   on_data_changed=self.data_changed.emit)
       self._server.start()
     except Exception as e:
       self.failed.emit(str(e))
@@ -43,17 +43,18 @@ class WebManager(QObject):
     server_started()    — 服务启动成功
     server_stopped()    — 服务已停止
     error_occurred(str) — 启动失败，携带错误消息
+    data_changed()      — Web端数据变更（安全投递到主线程）
   """
 
   server_started = pyqtSignal()
   server_stopped = pyqtSignal()
   error_occurred = pyqtSignal(str)
+  data_changed = pyqtSignal()  # 从Web线程安全投递到主线程
 
-  def __init__(self, parent=None, on_data_changed=None):
+  def __init__(self, parent=None):
     super().__init__(parent)
     self._worker = None
     self._thread = None
-    self._on_data_changed = on_data_changed
 
   @property
   def is_running(self) -> bool:
@@ -66,11 +67,12 @@ class WebManager(QObject):
       return
 
     self._thread = QThread()
-    self._worker = _WebWorker(on_data_changed=self._on_data_changed)
+    self._worker = _WebWorker()
     self._worker.moveToThread(self._thread)
     self._thread.started.connect(self._worker.run)
     self._worker.started.connect(self._on_server_started)
     self._worker.failed.connect(self._on_error)
+    self._worker.data_changed.connect(self.data_changed)  # 安全跨线程投递
     self._thread.start()
 
   def stop_server(self):

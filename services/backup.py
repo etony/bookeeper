@@ -173,6 +173,17 @@ class BackupService:
       LOG.warning('安全备份失败（继续恢复）: %s', e)
 
     try:
+      # 先清理活动库的 WAL，避免残留日志干扰恢复
+      try:
+        conn = sqlite3.connect(self._db_path)
+        try:
+          conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+          conn.execute('PRAGMA journal_mode=DELETE')
+        finally:
+          conn.close()
+      except sqlite3.Error as e:
+        LOG.warning('恢复前清理 WAL 失败（继续恢复）: %s', e)
+
       # 用 sqlite3.backup 安全恢复，支持活动库
       # backup() 在 source 上调用，destination 作为参数：source.backup(destination)
       source = sqlite3.connect(backup_path)
@@ -182,6 +193,16 @@ class BackupService:
       finally:
         source.close()
         destination.close()
+
+      # 删除残留 WAL/SHM 文件
+      for suffix in ('-wal', '-shm'):
+        stale = self._db_path + suffix
+        try:
+          if os.path.exists(stale):
+            os.remove(stale)
+        except OSError:
+          pass
+
       LOG.info('恢复成功: %s → %s', backup_path, self._db_path)
       return True
     except sqlite3.Error as e:
