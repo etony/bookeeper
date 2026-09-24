@@ -73,12 +73,12 @@ class DoubanService:
     """
     根据 ISBN 从豆瓣获取单本图书信息。
 
-    ISBN 可以是 13 位或 17 位（含连字符），
-    函数内会自动传递给豆瓣 API。
+    ISBN 为 10 位或 13 位（上层已用 clean_isbn 清洗为纯数字），
+    直接拼入豆瓣 API URL 查询。
 
     返回 Book 对象，如果 ISBN 无效或网络失败则返回 None。
     """
-    if not isbn or len(isbn) not in (13, 17):
+    if not isbn or len(isbn) not in (10, 13):
       return None
 
     url = f'{Config.DOUBAN_ISBN_URL}/{isbn}'

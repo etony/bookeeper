@@ -4,12 +4,15 @@
 │                                          │
 │  实现 QAbstractTableModel，               │
 │  以 pandas DataFrame 为后端存储，          │
-│  支持排序、编辑、删除等操作。              │
+│  支持排序与单元格增量更新。                │
 └──────────────────────────────────────────┘
 """
 
 import pandas as pd
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, Qt
+
+# 需要按数值而非字符串排序的列（否则 "10" < "8"）
+_NUMERIC_COLS = {'价格', '评分', '人数'}
 
 
 class BookTableModel(QAbstractTableModel):
@@ -22,17 +25,15 @@ class BookTableModel(QAbstractTableModel):
     3. 支持随数据量线性扩展的大列表
 
   核心数据：
-    - self._original: 完整数据集的副本（用于增删操作时保持完整性）
-    - self._data: 当前视图数据（搜索/排序后可能只包含子集）
+    - self._data: 当前视图数据（加载/搜索/排序后的完整显示集）
   """
 
-  def __init__(self, data: pd.DataFrame = None):
+  def __init__(self, data=None):
     super().__init__()
     cols = ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
-    self._original = data if data is not None else pd.DataFrame(
+    self._data = data if data is not None else pd.DataFrame(
       {c: [] for c in cols}, dtype=object,
     )
-    self._data = self._original.copy()
 
   # ── Qt Model 接口 ──────────────────────────────────────
 
@@ -57,7 +58,8 @@ class BookTableModel(QAbstractTableModel):
         return str(value) if not pd.isna(value) else ''
     return None
 
-  def headerData(self, section: int, orientation: Qt.Orientation, role: int):
+  def headerData(self, section: int, orientation: Qt.Orientation,
+                 role: int = Qt.ItemDataRole.DisplayRole):
     """
     返回列名（水平标题）和行号（垂直标题）。
 
@@ -71,21 +73,32 @@ class BookTableModel(QAbstractTableModel):
         return str(section + 1)
     return None
 
-  def sort(self, column: int, order: Qt.SortOrder):
+  def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
     """
     按指定列排序。
 
     这是 QTableView.setSortingEnabled(True) 的回调，
     当用户点击表头时自动触发。
+
+    数值列（价格/评分/人数）先转 float 再排，
+    避免字符串序把 "10" 排在 "8" 前面；无法解析的值排末尾。
     """
     self.beginResetModel()
-    col_name = self._data.columns[column]
+    col_name = str(self._data.columns[column])
     ascending = order == Qt.SortOrder.AscendingOrder
-    self._data.sort_values(by=col_name, ascending=ascending, inplace=True)
-    self._data.reset_index(drop=True, inplace=True)
+    if col_name in _NUMERIC_COLS:
+      key = pd.to_numeric(self._data[col_name], errors='coerce')
+      self._data = (
+        self._data.assign(_sort_key=key)
+        .sort_values('_sort_key', ascending=ascending, na_position='last')
+        .drop(columns='_sort_key')
+      )
+    else:
+      self._data = self._data.sort_values(by=col_name, ascending=ascending)
+    self._data = self._data.reset_index(drop=True)
     self.endResetModel()
 
-  def load_dataframe(self, df: pd.DataFrame):
+  def load_dataframe(self, df: 'pd.DataFrame'):
     """
     全量替换表格数据。
 
@@ -95,12 +108,8 @@ class BookTableModel(QAbstractTableModel):
     用 beginResetModel / endResetModel 通知 Qt 视图完全刷新。
     """
     self.beginResetModel()
-    df = df.reset_index(drop=True)
-    self._original = df
-    self._data = df.copy()
+    self._data = df.reset_index(drop=True)
     self.endResetModel()
-
-  # ── 增量更新方法 ──────────────────────────────────────
 
   def update_row(self, row: int, data: list):
     """更新单行数据，避免全量刷新"""
@@ -112,17 +121,3 @@ class BookTableModel(QAbstractTableModel):
         self.index(row, 0),
         self.index(row, self._data.shape[1] - 1)
       )
-
-  def insert_row(self, row: int, data: list):
-    """插入新行"""
-    new_row = pd.DataFrame([data], columns=self._data.columns)
-    self.beginInsertRows(QModelIndex(), row, row)
-    self._data = pd.concat([self._data.iloc[:row], new_row, self._data.iloc[row:]],
-                           ignore_index=True)
-    self.endInsertRows()
-
-  def remove_rows(self, rows: list):
-    """删除指定行"""
-    self.beginResetModel()
-    self._data = self._data.drop(rows).reset_index(drop=True)
-    self.endResetModel()

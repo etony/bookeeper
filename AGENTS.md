@@ -27,7 +27,6 @@ python main.pyw         # 无控制台窗口（Windows）
 
 ## 注意事项
 
-- `new/` 目录是旧版重构实验，已废弃，无需关注
 - `/cover/{isbn}` 路由必须在 `/{path:path}` 通配路由之前注册
 - 表格模型基于 `pandas.DataFrame`，更新后用 `emitDataChanged()` 刷新
 - 豆瓣搜索需要两个不同的 API key（查 ISBN 用 one，关键词搜索用另一个）

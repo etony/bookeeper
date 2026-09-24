@@ -80,8 +80,11 @@ class BookRepo:
       with self._conn() as conn:
         conn.execute(...)
     """
-    conn = sqlite3.connect(self._path)
+    # timeout=30：写锁被占用时最多等 30 秒（GUI 与 Web 线程并发写）
+    conn = sqlite3.connect(self._path, timeout=30)
     conn.row_factory = sqlite3.Row   # 让查询结果支持按列名访问
+    # WAL：读写互不阻塞，适合桌面 + 内嵌 Web 并发访问同一库
+    conn.execute('PRAGMA journal_mode=WAL')
     try:
       yield conn
       conn.commit()
