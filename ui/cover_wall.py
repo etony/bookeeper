@@ -70,11 +70,14 @@ class CoverCard(QFrame):
     clicked = pyqtSignal(str)      # 点击信号，传递 ISBN
     double_clicked = pyqtSignal(str)  # 双击信号
     context_menu = pyqtSignal(str, object)  # 右键菜单信号 (isbn, pos)
+    # 线程池下载完成后，经此信号投递回主线程（工作线程不能直接碰控件）
+    _cover_ready = pyqtSignal(str, bytes)
 
     def __init__(self, book: Book, parent=None):
         super().__init__(parent)
         self._book = book
         self._cover_label = None
+        self._cover_ready.connect(self._on_cover_ready)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -173,18 +176,24 @@ class CoverCard(QFrame):
         _cover_pool.submit(
             self._book.isbn,
             self._book.cover_url,
-            self._on_cover_ready
+            self._forward_cover_ready
         )
 
+    def _forward_cover_ready(self, isbn: str, data: bytes):
+        """线程池回调（工作线程）——转为信号，排队投递到主线程"""
+        self._cover_ready.emit(isbn, data or b'')
+
     def _on_cover_ready(self, isbn: str, data: bytes):
-        """封面下载完成回调（从线程池调用）"""
+        """主线程槽：校验仍是当前书后设置封面"""
         if isbn != self._book.isbn:
             return
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._set_cover_from_data(data))
+        self._set_cover_from_data(data)
 
     def _set_cover_from_data(self, data: bytes):
         """从图片数据设置封面"""
+        if not data:
+            self._cover_label.setText('加载失败')
+            return
         img = QImage.fromData(data)
         if img.isNull():
             self._cover_label.setText('加载失败')

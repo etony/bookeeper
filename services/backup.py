@@ -12,6 +12,7 @@ import os
 import time
 import logging
 import shutil
+import sqlite3
 
 from config import Config
 
@@ -67,15 +68,31 @@ class BackupService:
     if latest and os.path.getmtime(latest) >= db_mtime:
       return None
 
+    path = None
     try:
       ts = time.strftime('%Y%m%d_%H%M%S')
       path = os.path.join(backup_dir, f'book_backup_{ts}.db')
-      shutil.copy2(self._db_path, path)
+      # SQLite online backup：从正在写入的库取得一致性快照。
+      # shutil.copy2 可能拷到写到一半的页，产生损坏的备份。
+      src = sqlite3.connect(self._db_path)
+      try:
+        dst = sqlite3.connect(path)
+        try:
+          src.backup(dst)
+        finally:
+          dst.close()
+      finally:
+        src.close()
       LOG.info('自动备份成功: %s', path)
       self._clean(backup_dir)
       return path
-    except (OSError, shutil.Error) as e:
+    except (OSError, shutil.Error, sqlite3.Error) as e:
       LOG.error('备份失败: %s', e)
+      if path and os.path.exists(path):
+        try:
+          os.remove(path)
+        except OSError:
+          pass
       return None
 
   def _clean(self, backup_dir: str, keep: int = None):
@@ -150,7 +167,26 @@ class BackupService:
       LOG.warning('安全备份失败（继续恢复）: %s', e)
 
     try:
+      # 先溶解当前库的 WAL，再覆盖，避免残留日志与恢复后的文件不匹配
+      try:
+        cur = sqlite3.connect(self._db_path)
+        try:
+          cur.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+          cur.execute('PRAGMA journal_mode=DELETE')
+        finally:
+          cur.close()
+      except sqlite3.Error as e:
+        LOG.warning('恢复前清理 WAL 失败（继续恢复）: %s', e)
+
       shutil.copy2(backup_path, self._db_path)
+      # 尽力删掉残留 WAL/SHM；若被占用则忽略（下次连接会重建）
+      for suffix in ('-wal', '-shm'):
+        stale = self._db_path + suffix
+        try:
+          if os.path.exists(stale):
+            os.remove(stale)
+        except OSError:
+          pass
       LOG.info('恢复成功: %s → %s', backup_path, self._db_path)
       return True
     except (OSError, shutil.Error) as e:

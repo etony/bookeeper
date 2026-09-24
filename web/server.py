@@ -128,18 +128,20 @@ class BookWebServer:
     POST /add        → 提交添加
     GET  /edit/{id}  → 编辑表单（支持?sync=1从豆瓣同步）
     POST /edit/{id}  → 提交编辑
-    GET  /delete/{id} → 删除图书
     GET  /book/{id}  → 图书详情（含封面）
     GET  /cover/{id} → 封面代理（解决豆瓣防盗链）
     GET  /stats      → 统计面板
+    POST /delete/{id} → 删除图书
 
   全部返回纯 HTML，不依赖 JavaScript。
   """
 
-  def __init__(self):
+  def __init__(self, on_started=None):
     self._repo = get_repo()
     self._app = FastAPI(title='Bookeeper API')
     self._server = None
+    # uvicorn 开始监听后的回调（在服务线程中调用）
+    self._on_started = on_started
     # 避免在详情页重复查询豆瓣 API（单次会话内有效）
     self._douban_tried = set()
     self._setup_routes()
@@ -494,6 +496,7 @@ class BookWebServer:
 
     这是一个阻塞调用，必须在独立线程中执行。
     使用 asyncio 事件循环支持 FastAPI 的异步特性。
+    监听就绪后调用 on_started 回调，再继续 serve 直到停止。
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -501,8 +504,21 @@ class BookWebServer:
     # sys.stdout 为 None 导致 formatter 配置失败；日志统一走应用根 logger
     config = uvicorn.Config(self._app, host='127.0.0.1', port=Config.WEB_PORT,
                             log_level='warning', log_config=None)
-    self._server = uvicorn.Server(config)
-    loop.run_until_complete(self._server.serve())
+    server = uvicorn.Server(config)
+    self._server = server
+
+    async def _serve():
+      task = loop.create_task(server.serve())
+      while not server.started:
+        if task.done():
+          task.result()
+          return
+        await asyncio.sleep(0.05)
+      if self._on_started:
+        self._on_started()
+      await task
+
+    loop.run_until_complete(_serve())
 
   def stop(self):
     """停止服务"""

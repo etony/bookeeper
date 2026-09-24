@@ -531,7 +531,12 @@ class MainWindow(QMainWindow):
 
     self._merge_user_fields(book)
     self._fill_form(book)
-    self._undo_manager.execute(AddBookCommand(self._repo, book))
+    # 已存在的书走 Update，否则撤销会误删整条记录
+    old_book = self._repo.get_by_isbn(book.isbn)
+    if old_book:
+      self._undo_manager.execute(UpdateBookCommand(self._repo, old_book, book))
+    else:
+      self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已获取: {book.title}')
@@ -795,7 +800,12 @@ class MainWindow(QMainWindow):
     if not book.start_date:
       book.start_date = QDate.currentDate().toString('yyyy-MM-dd')
     self._fill_form(book)
-    self._undo_manager.execute(AddBookCommand(self._repo, book))
+    # 已存在的书走 Update，否则撤销会误删整条记录
+    old_book = self._repo.get_by_isbn(book.isbn)
+    if old_book:
+      self._undo_manager.execute(UpdateBookCommand(self._repo, old_book, book))
+    else:
+      self._undo_manager.execute(AddBookCommand(self._repo, book))
     self._mark_dirty()
     self._load_data()
     self.statusBar().showMessage(f'已从豆瓣添加: {book.title}')
@@ -1133,8 +1143,9 @@ class _WebWorker(QObject):
   def run(self):
     try:
       from web.server import BookWebServer
-      self._server = BookWebServer()
-      self.started.emit()
+      # on_started：uvicorn 真正开始监听后才通知主线程，
+      # 避免浏览器抢在服务就绪前打开
+      self._server = BookWebServer(on_started=self.started.emit)
       self._server.start()
     except Exception as e:
       self.failed.emit(str(e))
