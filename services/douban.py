@@ -16,7 +16,7 @@ from typing import List, Optional
 import requests
 
 from config import Config
-from models.book import Book
+from core.models.book import Book
 
 LOG = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ from ui.theme import ACCENT, DIALOG_MARGINS, DIALOG_SPACING
 
 LOG = logging.getLogger(__name__)
 from services import get_repo
-from models.book import Book
+from core.models.book import Book
 from services.douban import DoubanService
 
 # 图书缓存最大数量——超过时淘汰最早访问的（LRU 策略）

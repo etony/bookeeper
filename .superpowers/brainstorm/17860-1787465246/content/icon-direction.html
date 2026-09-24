@@ -1,0 +1,51 @@
+<h2>任务栏图标设计方向</h2>
+<p class="subtitle">Bookeeper 暖深色主题 + 橙色强调色 #e8922a，界面大量用 📚 emoji</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>📚 书本轮廓 + 橙色书脊</h3>
+      <p>极简线条书本，书脊用品牌橙，白底或深色底均可识别</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>🅱 字母 B 变体</h3>
+      <p>圆角方块底，白色 B，橙色背景；或橙色 B 白底</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>📖 打开的书 + 橙色书签</h3>
+      <p>侧视打开的书，右侧一条橙色书签带出</p>
+    </div>
+  </div>
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>🟧 橙色圆角方块 + 白色书本图标</h3>
+      <p>类似 App 图标风格：品牌色底 + 白色符号，任务栏最醒目</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>额外范围确认</h3>
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="taskbar" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content"><strong>仅任务栏/窗口标题栏</strong>（setWindowIcon）</div>
+    </div>
+    <div class="option" data-choice="exe" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content"><strong>兼顾 .exe 文件图标</strong>（打包时用 .ico，含 16/32/48/256）</div>
+    </div>
+    <div class="option" data-choice="tray" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content"><strong>系统托盘图标</strong>（如后续加后台驻留）</div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,2 @@
+{"type":"click","text":"B\n    \n    \n      B2 — 衬线体 B\n      Georgia 衬线体，增添书卷气和辨识度","choice":"b2","id":null,"timestamp":1787467090537}
+{"type":"click","text":"I\n      \n        QPainter 动态绘制（推荐）\n        代码画图标，零外部依赖，支持所有尺寸（16/32/48/256），可同时生成 .ico 文件。项目已有 GUI 能力。","choice":"painter","id":null,"timestamp":1787467095834}

@@ -8,7 +8,7 @@
 """
 
 from typing import List, Callable
-from models.book import Book
+from core.models.book import Book
 
 
 class UndoCommand:

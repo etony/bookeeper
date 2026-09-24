@@ -12,7 +12,7 @@ from typing import List, Optional, Dict
 from contextlib import contextmanager
 
 from config import Config
-from models.book import Book
+from core.models.book import Book
 
 # ── 数据库建表 DDL ──────────────────────────────────────────
 # SQLite 的 CREATE TABLE IF NOT EXISTS 保证多次运行不会重复建表。

@@ -17,7 +17,9 @@ logging.basicConfig(
 
 from PyQt6.QtWidgets import QApplication
 
-from config import Config
+from config import Config, init_config
+# 从新的配置系统加载配置，覆盖默认值
+init_config()
 from ui.main_window import MainWindow
 
 
