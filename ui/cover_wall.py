@@ -133,15 +133,18 @@ class CoverCard(QFrame):
         layout.addWidget(self._cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # 书名
+        from PyQt6.QtGui import QFontMetrics
         self._title_label = QLabel()
         self._title_label.setFixedHeight(28)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._title_label.setWordWrap(True)
         self._title_label.setFont(QFont('', 10))
         title = self._book.title or '未知书名'
-        if len(title) > 12:
-            title = title[:11] + '...'
-        self._title_label.setText(title)
+        # 使用 QFontMetrics 智能截断
+        fm = QFontMetrics(self._title_label.font())
+        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, 136)
+        self._title_label.setText(elided)
+        self._title_label.setToolTip(self._book.title or '未知书名')
         layout.addWidget(self._title_label)
 
         # 加载封面
@@ -267,6 +270,7 @@ class CoverWallWidget(QWidget):
         self._books: List[Book] = []
         self._cards: List[CoverCard] = []
         self._columns = 5  # 每行显示的图书数量
+        self._auto_columns = True  # 自动列数模式
         self._empty_label = None
         self._setup_ui()
 
@@ -284,15 +288,15 @@ class CoverWallWidget(QWidget):
         toolbar.addWidget(QLabel('排序:'))
         self._sort_combo = QComboBox()
         self._sort_combo.addItems(['书名', '评分', '添加时间', '购书日期'])
-        self._sort_combo.setFixedHeight(28)
+        self._sort_combo.setFixedHeight(34)
         self._sort_combo.currentTextChanged.connect(self._on_sort_changed)
         toolbar.addWidget(self._sort_combo)
 
         toolbar.addWidget(QLabel('每行:'))
         self._columns_combo = QComboBox()
-        self._columns_combo.addItems(['3', '4', '5', '6', '7', '8'])
-        self._columns_combo.setCurrentText('5')
-        self._columns_combo.setFixedHeight(28)
+        self._columns_combo.addItems(['自动', '3', '4', '5', '6', '7', '8'])
+        self._columns_combo.setCurrentText('自动')
+        self._columns_combo.setFixedHeight(34)
         self._columns_combo.currentTextChanged.connect(self._on_columns_changed)
         toolbar.addWidget(self._columns_combo)
 
@@ -403,11 +407,31 @@ class CoverWallWidget(QWidget):
 
     def _on_columns_changed(self, text: str):
         """每行数量改变"""
-        try:
-            self._columns = int(text)
+        if text == '自动':
+            self._auto_columns = True
+            self._update_auto_columns()
+        else:
+            self._auto_columns = False
+            try:
+                self._columns = int(text)
+                self._refresh_grid()
+            except ValueError:
+                pass
+
+    def _update_auto_columns(self):
+        """根据窗口宽度自动计算列数"""
+        if not self._auto_columns:
+            return
+        width = self._scroll_area.viewport().width()
+        if width > 0:
+            self._columns = max(3, min(8, width // 160))
             self._refresh_grid()
-        except ValueError:
-            pass
+
+    def resizeEvent(self, event):
+        """窗口大小变化时自动调整列数"""
+        super().resizeEvent(event)
+        if self._auto_columns:
+            self._update_auto_columns()
 
     def _on_card_clicked(self, isbn: str):
         """卡片点击事件"""

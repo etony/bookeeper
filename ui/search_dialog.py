@@ -150,7 +150,13 @@ class SearchDialog(QDialog):
     self._set_loading(False)
     self._books = books
     if not books:
-      QMessageBox.information(self, '搜索结果', '未找到匹配的图书')
+      # 空结果：显示空状态提示
+      model = QStandardItemModel(1, 9)
+      model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])
+      item = QStandardItem('未找到匹配的图书')
+      item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+      model.setItem(0, 0, item)
+      self._table.setModel(model)
       return
     model = QStandardItemModel(len(books), 9)
     model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])

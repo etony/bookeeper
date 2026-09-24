@@ -91,6 +91,7 @@ class SearchBarWidget(QGroupBox):
 
   def _on_search(self):
     """执行搜索"""
+    self._btn_search.setText('查询')
     keyword, status = self.get_search_params()
     self.search_requested.emit(keyword, status)
 
@@ -102,13 +103,5 @@ class SearchBarWidget(QGroupBox):
   def _on_search_text_changed(self, text: str):
     """搜索文本变化时重置定时器（防抖 300ms）"""
     self._search_timer.stop()
-    # 显示搜索中状态
-    self._btn_search.setText('🔎 搜索中...')
+    self._btn_search.setText('搜索中...')
     self._search_timer.start(300)
-
-  def _on_search(self):
-    """执行搜索"""
-    # 恢复搜索按钮状态
-    self._btn_search.setText('🔎 查询')
-    keyword, status = self.get_search_params()
-    self.search_requested.emit(keyword, status)

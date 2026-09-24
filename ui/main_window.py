@@ -671,12 +671,25 @@ class MainWindow(QMainWindow):
       return
     dlg = QDialog(self)
     dlg.setWindowTitle('选择备份')
-    dlg.setMinimumSize(420, 360)
+    dlg.setMinimumSize(480, 360)
     layout = QVBoxLayout(dlg)
     layout.addWidget(QLabel('选择要恢复的备份（当前数据会自动保存一份）：'))
     listw = QListWidget()
     for path, name in backups:
-      item = QListWidgetItem(name)
+      # 解析文件大小和修改时间
+      try:
+        file_size = os.path.getsize(path)
+        mod_time = os.path.getmtime(path)
+        from datetime import datetime
+        time_str = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M')
+        if file_size > 1024 * 1024:
+          size_str = f'{file_size / 1024 / 1024:.1f} MB'
+        else:
+          size_str = f'{file_size / 1024:.0f} KB'
+        display = f'{name}  ({size_str}, {time_str})'
+      except OSError:
+        display = name
+      item = QListWidgetItem(display)
       item.setData(Qt.ItemDataRole.UserRole, path)
       listw.addItem(item)
     listw.setCurrentRow(0)
@@ -761,6 +774,9 @@ class MainWindow(QMainWindow):
     qss = DARK_QSS if self._dark_mode else LIGHT_QSS
     self.setStyleSheet(qss)
     self._toolbar.set_dark_mode(self._dark_mode)
+    # 刷新封面墙卡片样式（卡片颜色硬编码在创建时，需重建）
+    if self._is_cover_wall_mode:
+      self._cover_wall.set_books(self._repo.get_all())
     s = self._settings()
     s.setValue('darkMode', self._dark_mode)
 

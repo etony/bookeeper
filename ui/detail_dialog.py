@@ -10,7 +10,7 @@
 import logging
 
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPalette
+from PyQt6.QtGui import QImage, QPixmap, QPalette, QShortcut, QKeySequence
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser, QPushButton
 
 from config import Config
@@ -108,6 +108,12 @@ class DetailDialog(QDialog):
     nav.addWidget(self._page_label, stretch=1)
     nav.addWidget(self._next_btn)
     layout.addLayout(nav)
+
+    # 键盘快捷键翻页
+    QShortcut(QKeySequence('Left'), self, self._prev)
+    QShortcut(QKeySequence('Right'), self, self._next)
+    QShortcut(QKeySequence('Up'), self, self._prev)
+    QShortcut(QKeySequence('Down'), self, self._next)
 
     # ── 内容区：封面 + 信息 ──────────────────────────────
     content = QHBoxLayout()
@@ -212,6 +218,11 @@ class DetailDialog(QDialog):
     使用 QThread + 工作对象模式，
     避免线程操作界面控件。
     """
+    # 先停止旧线程，防止快速翻页时泄漏
+    if hasattr(self, '_cover_thread') and self._cover_thread and self._cover_thread.isRunning():
+      self._cover_thread.quit()
+      self._cover_thread.wait(1000)
+
     self._cover_thread = QThread()
     self._cover_worker = _CoverWorker(url, isbn, referer)
     self._cover_worker.moveToThread(self._cover_thread)
