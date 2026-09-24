@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}添加图书 - Bookeeper{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+  <form method="get" action="/add" style="display:flex;gap:8px;align-items:center;padding:0;border:none;background:none;margin:0">
+    <label style="margin:0;white-space:nowrap">ISBN</label>
+    <input type="text" name="isbn" placeholder="输入 ISBN 获取" value="{{ isbn }}" style="width:200px">
+    <input type="hidden" name="fetch" value="1">
+    <button class="btn btn-primary" type="submit">🌐 获取</button>
+  </form>
+</div>
+
+<form method="post" action="/add">
+  <label>ISBN</label><input type="text" name="isbn" required value="{{ vals.isbn }}">
+  <label>书名</label><input type="text" name="title" value="{{ vals.title }}">
+  <label>作者</label><input type="text" name="author" value="{{ vals.author }}">
+  <label>出版社</label><input type="text" name="publisher" value="{{ vals.publisher }}">
+  <label>价格</label><input type="text" name="price" value="{{ vals.price }}">
+  <label>评分</label><input type="text" name="rating" value="{{ vals.rating }}">
+  <label>状态</label>
+  <select name="status">
+    {% for status in statuses %}
+      <option{% if vals.status == status %} selected{% endif %}>{{ status }}</option>
+    {% endfor %}
+  </select>
+  <label>书柜</label><input type="text" name="shelf" value="{{ vals.shelf }}">
+  <label>购书日期</label><input type="date" name="start_date" value="{{ vals.start_date }}">
+  <label>已读日期</label><input type="date" name="end_date" value="{{ vals.end_date }}">
+  <div><button class="btn btn-primary" type="submit">保存</button></div>
+</form>
+{% endblock %}

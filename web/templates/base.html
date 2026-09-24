@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{% block title %}Bookeeper{% endblock %}</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#1c1c1f;--surface:#242428;--surface2:#2c2c31;--border:#323238;--border-hover:#404048;--text:#e0e0e4;--text2:#9a9aa0;--text3:#6a6a70;--accent:#e8922a;--accent-hover:#f0a840;--accent-dim:#8a6020;--danger:#e05050;--danger-bg:#3a1818;--radius:8px;--radius-sm:4px}
+        body{font-family:-apple-system,"Microsoft YaHei","Noto Sans SC",sans-serif;background:var(--bg);color:var(--text);padding:24px;font-size:14px;line-height:1.6}
+        a{color:var(--accent);text-decoration:none}
+        a:hover{color:var(--accent-hover);text-decoration:underline}
+        h1{font-size:26px;font-weight:700;margin-bottom:20px;background:linear-gradient(135deg,var(--accent),#f0b060);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .nav{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+        .nav a{padding:7px 16px;border-radius:var(--radius-sm);color:var(--text2);font-size:13px;font-weight:500}
+        .nav a:hover{background:var(--surface2);color:var(--accent);text-decoration:none}
+        .toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+        .toolbar input,.toolbar select{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:14px;outline:none}
+        .toolbar input:focus,.toolbar select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(232,146,42,.15)}
+        .toolbar button,.btn{padding:7px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;border:none}
+        .btn-primary{background:var(--accent);color:#1c1c1f}
+        .btn-primary:hover{background:var(--accent-hover)}
+        .btn-danger{background:var(--danger-bg);border:1px solid var(--danger);color:var(--danger)}
+        table{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+        th{background:var(--surface2);padding:10px 12px;text-align:left;font-weight:600;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border)}
+        td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px}
+        tr:hover td{background:rgba(232,146,42,.06)}
+        .pagination{margin-top:16px;display:flex;gap:6px;align-items:center;justify-content:center}
+        .pagination a,.pagination span{padding:6px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500}
+        .pagination a{background:var(--surface);border:1px solid var(--border);color:var(--text2)}
+        .pagination a:hover{background:var(--surface2);border-color:var(--accent);color:var(--accent);text-decoration:none}
+        .pagination .active{background:var(--accent);border:1px solid var(--accent);color:#1c1c1f}
+        .summary{color:var(--text2);font-size:13px;margin-bottom:12px;text-align:center}
+        .msg{padding:12px 16px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:13px}
+        .msg-info{background:rgba(232,146,42,.08);border:1px solid rgba(232,146,42,.25);color:var(--accent)}
+        .msg-err{background:var(--danger-bg);border:1px solid var(--danger);color:var(--danger)}
+        .chart-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+        .chart-box h3{margin:0 0 12px;font-size:15px;color:var(--text)}
+        .chart-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+        .chart-bar .label{flex:0 0 100px;font-size:12px;color:var(--text2);text-align:right}
+        .chart-bar .fill{background:var(--accent);color:#1c1c1f;font-size:11px;font-weight:600;padding:3px 8px;border-radius:3px;min-width:20px;text-align:right}
+        .btn-link{background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:13px;font-weight:500}
+        .btn-link:hover{color:var(--accent-hover);text-decoration:underline}
+        form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:500px}
+        form label{display:block;font-size:12px;color:var(--text2);margin-top:12px;margin-bottom:4px}
+        form input,form select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-size:14px;outline:none}
+        form input:focus,form select:focus{border-color:var(--accent)}
+        .cover-wall{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:16px}
+        .cover-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px;cursor:pointer;transition:all .2s}
+        .cover-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+        .cover-card img{width:100%;height:200px;object-fit:contain;border-radius:4px;background:#2c2c31}
+        .cover-card .no-cover{width:100%;height:200px;display:flex;align-items:center;justify-content:center;background:#2c2c31;border-radius:4px;color:var(--text3);font-size:13px}
+        .cover-card .info{margin-top:8px;text-align:center}
+        .cover-card .title{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .cover-card .meta{font-size:12px;color:var(--text2);margin-top:4px}
+        .cover-card .rating{display:inline-block;background:rgba(232,146,42,.15);color:var(--accent);padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600}
+        .cover-card .status{display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px;font-weight:500;margin-right:4px}
+        .cover-card .status-已读{background:#4a9;color:white}
+        .cover-card .status-计划{background:#58a;color:white}
+        .cover-card .status-默认{background:#666;color:white}
+        .sort-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+        .sort-bar select{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;color:var(--text);font-size:13px}
+        @media(max-width:900px){.cover-wall{grid-template-columns:repeat(4,1fr)}}
+        @media(max-width:700px){.cover-wall{grid-template-columns:repeat(3,1fr)}}
+        @media(max-width:500px){.cover-wall{grid-template-columns:repeat(2,1fr)}}
+    </style>
+</head>
+<body>
+    <h1>📚 Bookeeper</h1>
+    <div class="nav">
+        <a href="/">📚 图书列表</a>
+        <a href="/cover-wall">🖼️ 封面墙</a>
+        <a href="/add">➕ 添加</a>
+        <a href="/stats">📊 统计</a>
+    </div>
+    <div id="main">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

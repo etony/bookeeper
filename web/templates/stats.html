@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}统计 - Bookeeper{% endblock %}
+
+{% block content %}
+<h2>📊 统计面板</h2>
+
+{% if status_counts %}
+<div class="chart-box">
+    <h3>阅读状态</h3>
+    {% for k, v in status_counts.items() %}
+    <div class="chart-bar">
+        <span class="label">{{ k }}</span>
+        <div class="fill" style="width:{{ [2, (v / status_total * 100 * 3)|int]|max }}%">{{ v }} ({{ "%.1f"|format(v / status_total * 100) }}%)</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if pubs %}
+<div class="chart-box">
+    <h3>出版社 TOP10</h3>
+    {% for k, v in pubs %}
+    <div class="chart-bar">
+        <span class="label">{{ k }}</span>
+        <div class="fill" style="width:{{ [5, (v / pubs_max * 80)|int]|max }}%">{{ v }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if dist %}
+{% set dist_max = dist.values()|max %}
+{% if dist_max > 0 %}
+<div class="chart-box">
+    <h3>评分分布</h3>
+    {% for k, v in dist.items() %}
+    <div class="chart-bar">
+        <span class="label">{{ k }}</span>
+        <div class="fill" style="width:{{ [5, (v / dist_max * 80)|int]|max }}%">{{ v }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if not charts_exist %}
+<p style="color:#9a9aa0">暂无数据</p>
+{% endif %}
+{% endblock %}

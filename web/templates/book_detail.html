@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} - Bookeeper{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:24px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        {% if book.cover_url %}
+            <img src="/cover/{{ book.isbn }}" alt="封面" style="width:200px;height:280px;object-fit:contain;border-radius:4px;background:#2c2c31">
+        {% else %}
+            <div style="width:200px;height:280px;border-radius:4px;background:#2c2c31;display:flex;align-items:center;justify-content:center;color:#6a6a70;font-size:13px">无封面</div>
+        {% endif %}
+        
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
+            {% if prev_link %}
+                <a href="{{ prev_link }}" style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);text-decoration:none">◀ 上一本</a>
+            {% else %}
+                <span style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3)">◀ 上一本</span>
+            {% endif %}
+            
+            {% if next_link %}
+                <a href="{{ next_link }}" style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);text-decoration:none">下一本 ▶</a>
+            {% else %}
+                <span style="padding:6px 18px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3)">下一本 ▶</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div style="flex:1;min-width:0">
+        <h2 style="margin-top:0;margin-bottom:16px">📖 {{ book.title }}</h2>
+        <div style="margin-bottom:16px"><a href="/edit/{{ book.isbn }}">✏️ 编辑</a> | <a href="/">← 返回</a></div>
+        
+        <table style="width:100%;border-collapse:collapse">
+            {% for key, value in fields %}
+                {% if value %}
+                <tr>
+                    <th style="width:80px;text-transform:none;padding:6px 12px;color:#9a9aa0;font-weight:500;border-bottom:1px solid #2c2c31">{{ key }}</th>
+                    <td style="padding:6px 12px;border-bottom:1px solid #2c2c31">{{ value }}</td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+    </div>
+</div>
+{% endblock %}

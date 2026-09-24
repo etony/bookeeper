@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}封面墙 - Bookeeper{% endblock %}
+
+{% block content %}
+<form class="toolbar" method="get" action="/cover-wall">
+    <input type="text" name="q" placeholder="搜索..." value="{{ q }}">
+    <select name="sort">
+        {% for value, label in sort_options %}
+            <option{% if value == sort %} selected{% endif %} value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+    </select>
+    <button class="btn btn-primary">🔎 搜索</button>
+</form>
+
+<div class="summary">共 {{ books|length }} 本</div>
+
+<div class="cover-wall">
+    {% for book in books %}
+    <a href="/book/{{ book.isbn }}" class="cover-card">
+        {% if book.cover_url %}
+            <img src="/cover/{{ book.isbn }}" alt="封面" loading="lazy">
+        {% else %}
+            <div class="no-cover">无封面</div>
+        {% endif %}
+        
+        <div class="info">
+            <div class="title">{{ book.title[:15] }}{% if book.title|length > 15 %}...{% endif %}</div>
+            <div class="meta">
+                <span class="status status-{{ book.status if book.status in ['已读', '计划'] else '默认' }}">{{ book.status }}</span>
+                {% if book.rating and book.rating != '0' %}
+                    <span class="rating">{{ book.rating }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}

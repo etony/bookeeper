@@ -4,6 +4,7 @@ import sys
 import tempfile
 import pytest
 from config import init_config
+from fastapi.testclient import TestClient
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -19,6 +20,13 @@ def test_config():
     yield
     
     os.unlink(config_path)
+
+@pytest.fixture
+def client(test_config):
+    """测试客户端"""
+    from web.server import BookWebServer
+    server = BookWebServer()
+    return TestClient(server._app)
 
 @pytest.fixture
 def sample_books():

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}编辑 - {{ book.title }} - Bookeeper{% endblock %}
+
+{% block content %}
+{% if msg %}
+<div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+  <a href="/edit/{{ book.isbn }}?sync=1" class="btn btn-primary">🌐 从豆瓣同步</a>
+  <span style="color:var(--text2);font-size:13px">通过 ISBN 重新获取豆瓣数据</span>
+</div>
+
+<form method="post" action="/edit/{{ book.isbn }}">
+  <label>ISBN</label><input type="text" name="isbn" value="{{ book.isbn }}" readonly>
+  <label>书名</label><input type="text" name="title" value="{{ book.title }}">
+  <label>作者</label><input type="text" name="author" value="{{ book.author }}">
+  <label>出版社</label><input type="text" name="publisher" value="{{ book.publisher }}">
+  <label>价格</label><input type="text" name="price" value="{{ book.price }}">
+  <label>评分</label><input type="text" name="rating" value="{{ book.rating }}">
+  <label>状态</label>
+  <select name="status">
+    {% for status in statuses %}
+      <option{% if book.status == status %} selected{% endif %}>{{ status }}</option>
+    {% endfor %}
+  </select>
+  <label>书柜</label><input type="text" name="shelf" value="{{ book.shelf }}">
+  <label>购书日期</label><input type="date" name="start_date" value="{{ book.start_date or '' }}">
+  <label>已读日期</label><input type="date" name="end_date" value="{{ book.end_date or '' }}">
+  <div><button class="btn btn-primary" type="submit">保存</button></div>
+</form>
+{% endblock %}
