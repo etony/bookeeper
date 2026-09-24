@@ -68,6 +68,8 @@ BOOKEEPER_DATABASE_PATH=/path/to/books.db
 }
 ```
 
+> **注意**：`config.json` 使用 `douban_api_key`（下划线命名），旧版 `Config` 类使用 `DOUBAN_API_KEY`（大写+下划线）。推荐使用 `ConfigManager` 或 `get_config()` 访问配置。
+
 ### 配置模块
 
 `config/` 模块提供：
@@ -94,8 +96,8 @@ BOOKEEPER_DATABASE_PATH=/path/to/books.db
 │   ├── models/
 │   │   ├── base.py         # BaseModel（to_dict / from_dict）
 │   │   └── book.py         # Book dataclass（领域模型）
-│   ├── repositories/       # Repository 模式（预留）
-│   └── services/           # 核心服务（预留）
+│   ├── repositories/       # Repository 模式（预留，暂无内容）
+│   └── services/           # 核心服务（预留，暂无内容）
 ├── database.py             # 数据访问层（SQLite Repository，WAL）
 ├── utils.py                # ISBN 校验工具
 ├── requirements.txt        # Python 依赖清单

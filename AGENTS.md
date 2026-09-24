@@ -10,7 +10,7 @@ python main.py          # 桌面 GUI（带控制台）
 python main.pyw         # 无控制台（Windows）；与 main.py 近重复，改入口逻辑需两边同步
 ```
 
-无测试 / 无 CI / 无类型检查 / 无 lint——改完只能手工跑 GUI 或 Web 验证。
+有测试（pytest）/ 无 CI / 无类型检查 / 无 lint——改完跑 GUI、Web 或 pytest 验证。
 
 ## 架构速览
 
