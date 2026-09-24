@@ -8,16 +8,6 @@ from core.models.book import Book
 
 
 @pytest.fixture
-def repo():
-  """创建使用临时文件的 BookRepo 实例"""
-  with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
-    db_path = f.name
-  r = BookRepo(db_path)
-  yield r
-  os.unlink(db_path)
-
-
-@pytest.fixture
 def sample_book():
   """示例图书"""
   return Book(
@@ -192,3 +182,77 @@ def test_status_counts(repo, sample_book, second_book):
   repo.upsert(second_book)
   counts = repo.status_counts()
   assert counts == {'默认': 1, '已读': 1}
+
+
+# ── 出版社/评分统计 ────────────────────────────────────
+
+
+def test_publisher_top(repo, sample_book, second_book):
+  """出版社 TOP N"""
+  repo.upsert(sample_book)
+  repo.upsert(second_book)
+  top = repo.publisher_top(10)
+  assert len(top) == 2
+  publishers = [p for p, _ in top]
+  assert '南海出版公司' in publishers
+  assert '北京十月文艺出版社' in publishers
+
+
+def test_publisher_top_empty(repo):
+  """空库时出版社统计为空"""
+  assert repo.publisher_top() == []
+
+
+def test_publisher_top_limit(repo):
+  """出版社 TOP N 限制数量"""
+  for i in range(5):
+    book = Book(isbn=f'isbn{i}', title=f'Book{i}', publisher=f'出版社{i}')
+    repo.upsert(book)
+  top = repo.publisher_top(3)
+  assert len(top) == 3
+
+
+def test_publisher_top_skips_empty(repo):
+  """空出版社不参与统计"""
+  book_empty = Book(isbn='isbn0', title='No Publisher', publisher='')
+  book_ok = Book(isbn='isbn1', title='Has Publisher', publisher='出版社A')
+  repo.upsert(book_empty)
+  repo.upsert(book_ok)
+  top = repo.publisher_top()
+  assert len(top) == 1
+  assert top[0] == ('出版社A', 1)
+
+
+def test_rating_distribution(repo):
+  """评分分布统计"""
+  books = [
+    Book(isbn='isbn1', title='B1', rating='5.0'),
+    Book(isbn='isbn2', title='B2', rating='6.5'),
+    Book(isbn='isbn3', title='B3', rating='7.5'),
+    Book(isbn='isbn4', title='B4', rating='8.5'),
+    Book(isbn='isbn5', title='B5', rating='9.5'),
+  ]
+  for b in books:
+    repo.upsert(b)
+  dist = repo.rating_distribution()
+  assert dist['0-6'] == 1
+  assert dist['6-7'] == 1
+  assert dist['7-8'] == 1
+  assert dist['8-9'] == 1
+  assert dist['9-10'] == 1
+
+
+def test_rating_distribution_empty(repo):
+  """空库时评分布全为 0"""
+  dist = repo.rating_distribution()
+  assert all(v == 0 for v in dist.values())
+
+
+def test_rating_distribution_skips_zero_and_empty(repo):
+  """排除空评分和 0 评分"""
+  repo.upsert(Book(isbn='isbn1', title='B1', rating='0'))
+  repo.upsert(Book(isbn='isbn2', title='B2', rating=''))
+  repo.upsert(Book(isbn='isbn3', title='B3', rating='8.0'))
+  dist = repo.rating_distribution()
+  assert dist['8-9'] == 1
+  assert sum(dist.values()) == 1

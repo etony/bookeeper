@@ -14,16 +14,6 @@ from services.undo import (
 
 
 @pytest.fixture
-def repo():
-  """创建使用临时文件的 BookRepo"""
-  with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
-    db_path = f.name
-  r = BookRepo(db_path)
-  yield r
-  os.unlink(db_path)
-
-
-@pytest.fixture
 def manager():
   """创建 UndoManager"""
   return UndoManager()
@@ -186,22 +176,18 @@ def test_clear(manager, repo, book, book2):
 # ── 最大历史限制 ────────────────────────────────────
 
 
-def test_max_history_limit():
+def test_max_history_limit(manager, repo):
   """超过最大历史记录数时丢弃最早的"""
-  m = UndoManager(max_history=3)
+  manager._max_history = 3
   books = [Book(isbn=f'isbn{i}', title=f'Book{i}') for i in range(5)]
 
-  # 模拟执行 5 次（不真正操作数据库，直接操作栈）
   for b in books:
-    cmd = AddBookCommand(None, b)
-    cmd.execute = lambda: None  # 跳过实际执行
-    cmd.undo = lambda: None
-    m.execute(cmd)
+    cmd = AddBookCommand(repo, b)
+    manager.execute(cmd)
 
-  # 只保留最近 3 条
-  assert len(m._undo_stack) == 3
-  # 最早的 2 条被丢弃
-  assert m._undo_stack[0]._book.isbn == 'isbn2'
+  assert repo.count() == 5
+  assert len(manager._undo_stack) == 3
+  assert manager._undo_stack[0]._book.isbn == 'isbn2'
 
 
 # ── 命令描述 ────────────────────────────────────────

@@ -15,10 +15,10 @@ def test_config():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         f.write('{"database_path": ":memory:"}')
         config_path = f.name
-    
+
     init_config(config_path)
     yield
-    
+
     os.unlink(config_path)
 
 @pytest.fixture
@@ -36,3 +36,14 @@ def sample_books():
         {"isbn": "9787530217337", "title": "活着", "author": "余华"},
         {"isbn": "9787544270878", "title": "1984", "author": "乔治·奥威尔"},
     ]
+
+
+@pytest.fixture
+def repo():
+    """创建使用临时文件的 BookRepo 实例"""
+    from database import BookRepo
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        db_path = f.name
+    r = BookRepo(db_path)
+    yield r
+    os.unlink(db_path)

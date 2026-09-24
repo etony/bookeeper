@@ -1,6 +1,5 @@
 """备份服务测试"""
 import os
-import time
 import tempfile
 import shutil
 import sqlite3
@@ -102,21 +101,24 @@ def test_list_backups_after_backup(backup_service):
   assert name.endswith('.db')
 
 
-def test_list_backups_sorted_newest_first(backup_service):
+def test_list_backups_sorted_newest_first(backup_service, backup_env):
   """备份按时间倒序"""
-  # 创建两个备份，中间加间隔确保时间戳不同
-  backup_service.backup()
-  time.sleep(1.1)
-  # 修改数据库内容使 mtime 变化
-  conn = sqlite3.connect(backup_service._db_path)
-  conn.execute("INSERT INTO test VALUES (2)")
-  conn.commit()
-  conn.close()
-  backup_service.backup()
+  tmpdir, db_path = backup_env
+  backup_dir = os.path.join(tmpdir, 'backups')
+  os.makedirs(backup_dir, exist_ok=True)
+
+  # 手动创建两个备份文件并设置不同 mtime
+  old_name = 'book_backup_20260101_000000.db'
+  new_name = 'book_backup_20260601_000000.db'
+  for name in [old_name, new_name]:
+    shutil.copy2(db_path, os.path.join(backup_dir, name))
+  os.utime(os.path.join(backup_dir, old_name), (1000000, 1000000))
+  os.utime(os.path.join(backup_dir, new_name), (2000000, 2000000))
+
   backups = backup_service.list_backups()
   assert len(backups) == 2
-  # 最新的在前
-  assert backups[0][1] >= backups[1][1]
+  assert backups[0][1] == new_name
+  assert backups[1][1] == old_name
 
 
 # ── 清理旧备份 ──────────────────────────────────────
@@ -140,3 +142,57 @@ def test_clean_removes_old_backups(backup_service, backup_env):
   backup_service._clean(backup_dir, keep=3)
   remaining = [f for f in os.listdir(backup_dir) if f.startswith('book_backup_')]
   assert len(remaining) == 3
+
+
+# ── 恢复备份 ────────────────────────────────────────────
+
+
+def test_restore_from_backup(backup_service, backup_env):
+  """从备份恢复数据库"""
+  _, db_path = backup_env
+  # 先备份当前状态
+  backup_path = backup_service.backup()
+  assert backup_path is not None
+
+  # 修改数据库
+  conn = sqlite3.connect(db_path)
+  conn.execute("INSERT INTO test VALUES (99)")
+  conn.commit()
+  # 验证已修改
+  rows = conn.execute("SELECT * FROM test").fetchall()
+  assert len(rows) == 2
+  conn.close()
+
+  # 恢复
+  result = backup_service.restore(backup_path)
+  assert result is True
+
+  # 验证恢复后回到原始状态
+  conn = sqlite3.connect(db_path)
+  rows = conn.execute("SELECT * FROM test").fetchall()
+  assert len(rows) == 1
+  conn.close()
+
+
+def test_restore_creates_safety_backup(backup_service, backup_env):
+  """恢复前创建安全备份"""
+  _, db_path = backup_env
+  backup_path = backup_service.backup()
+
+  # 修改数据库
+  conn = sqlite3.connect(db_path)
+  conn.execute("INSERT INTO test VALUES (99)")
+  conn.commit()
+  conn.close()
+
+  backup_service.restore(backup_path)
+
+  backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+  safety = [f for f in os.listdir(backup_dir) if f.startswith('before_restore_')]
+  assert len(safety) == 1
+
+
+def test_restore_nonexistent_backup(backup_service):
+  """恢复不存在的备份返回 False"""
+  result = backup_service.restore('/nonexistent/backup.db')
+  assert result is False
