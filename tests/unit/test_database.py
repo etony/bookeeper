@@ -69,15 +69,15 @@ def test_get_all_empty(repo):
   assert repo.get_all() == []
 
 
-def test_get_all_sorted_by_title(repo, sample_book, second_book):
-  """按书名排序"""
+def test_get_all_newest_first(repo, sample_book, second_book):
+  """新记录在最前（按 rowid 倒序）"""
   repo.upsert(second_book)
   repo.upsert(sample_book)
   all_books = repo.get_all()
   assert len(all_books) == 2
-  # 按 title 排序，两个书名不同即可验证已排序
-  titles = [b.title for b in all_books]
-  assert titles == sorted(titles)
+  # 新插入的 sample_book 应在最前
+  assert all_books[0].isbn == sample_book.isbn
+  assert all_books[1].isbn == second_book.isbn
 
 
 def test_get_by_isbn_found(repo, sample_book):

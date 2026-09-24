@@ -110,12 +110,12 @@ class BookRepo:
 
   def get_all(self) -> List[Book]:
     """
-    获取全部图书，按书名排序。
+    获取全部图书，新记录在最前（按 rowid 倒序）。
 
     返回 Book 对象列表，空表返回空列表 []。
     """
     with self._conn() as conn:
-      rows = conn.execute('SELECT * FROM books ORDER BY title').fetchall()
+      rows = conn.execute('SELECT * FROM books ORDER BY rowid DESC').fetchall()
       return [Book.from_dict(dict(r)) for r in rows]
 
   def get_by_isbn(self, isbn: str) -> Optional[Book]:
@@ -203,7 +203,7 @@ class BookRepo:
     两个条件都用 AND 连接，可以组合使用。
     """
     where, params = self._build_filter(keyword, status)
-    sql = f'SELECT * FROM books {where} ORDER BY title'
+    sql = f'SELECT * FROM books {where} ORDER BY rowid DESC'
     with self._conn() as conn:
       rows = conn.execute(sql, params).fetchall()
       return [Book.from_dict(dict(r)) for r in rows]
