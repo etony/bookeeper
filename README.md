@@ -43,14 +43,39 @@ python main.pyw         # 无控制台窗口（Windows）
 
 ## 配置
 
+配置系统支持三种来源（优先级从高到低）：环境变量 → config.json → 默认值。
+
+### 环境变量
+
+使用 `BOOKEEPER_` 前缀：
+
+```bash
+BOOKEEPER_WEB_PORT=9000
+BOOKEEPER_DATABASE_PATH=/path/to/books.db
+```
+
+### 配置文件
+
 编辑 `config.json`（与 `main.py` 同级）：
 
 ```json
 {
-  "DOUBAN_API_KEY": "你的 API key",
-  "DOUBAN_API_KEY_SEARCH": "你的搜索 API key"
+  "douban_api_key": "你的 API key",
+  "douban_api_key_search": "你的搜索 API key",
+  "web_port": 8899,
+  "database_path": "books.db",
+  "backup_keep": 30
 }
 ```
+
+### 配置模块
+
+`config/` 模块提供：
+
+- `ConfigManager` — 配置管理器，加载/验证/重载配置
+- `ConfigSchema` — 配置验证（类型、范围、长度检查）
+- `EnvLoader` — 环境变量自动转换和加载
+- `AppConfig` — 配置数据类（嵌套结构）
 
 主题、窗口几何、表头状态通过 `settings.ini` 自动持久化。
 
@@ -59,13 +84,24 @@ python main.pyw         # 无控制台窗口（Windows）
 ```
 ├── main.py                 # 应用入口（带控制台）
 ├── main.pyw                # 应用入口（无控制台，Windows）
-├── config.py               # 全局配置（API key、列名、端口等）
+├── config/                 # 配置管理模块
+│   ├── __init__.py         # ConfigManager + 旧版 Config 兼容类
+│   ├── defaults.py         # 配置数据类（AppConfig、DoubanConfig 等）
+│   ├── schema.py           # 配置验证模式
+│   └── env.py              # 环境变量加载器（BOOKEEPER_ 前缀）
 ├── config.json             # 用户配置（API key，已 gitignore）
-├── utils.py                # ISBN 校验工具
+├── core/                   # 核心业务逻辑
+│   ├── models/
+│   │   ├── base.py         # BaseModel（to_dict / from_dict）
+│   │   └── book.py         # Book dataclass（领域模型）
+│   ├── repositories/       # Repository 模式（预留）
+│   └── services/           # 核心服务（预留）
 ├── database.py             # 数据访问层（SQLite Repository，WAL）
+├── utils.py                # ISBN 校验工具
 ├── requirements.txt        # Python 依赖清单
+├── requirements-dev.txt    # 开发依赖（pytest、black、flake8、mypy）
+├── pytest.ini              # pytest 配置
 ├── models/
-│   ├── book.py             # Book dataclass（领域模型）
 │   └── table_model.py      # QAbstractTableModel（pandas 后端）
 ├── services/
 │   ├── __init__.py         # 全局 BookRepo 单例
@@ -75,6 +111,11 @@ python main.pyw         # 无控制台窗口（Windows）
 │   ├── covers.py           # 封面本地缓存
 │   └── undo.py             # 撤销/重做（命令模式）
 ├── ui/
+│   ├── components/         # 可复用 UI 组件
+│   │   ├── book_form.py    # 图书编辑表单
+│   │   ├── search_bar.py   # 搜索栏
+│   │   ├── tool_bar.py     # 工具栏
+│   │   └── web_manager.py  # Web 服务管理
 │   ├── theme.py            # 暗色/亮色 QSS 主题（暖橙强调色）
 │   ├── main_window.py      # 主窗口（Mediator 协调者）
 │   ├── cover_wall.py       # 封面墙（线程池下载）
@@ -83,7 +124,20 @@ python main.pyw         # 无控制台窗口（Windows）
 │   ├── stats_dialog.py     # 统计面板（matplotlib）
 │   └── icon.py             # 应用图标绘制（QPainter 动态绘制）
 ├── web/
-│   └── server.py           # FastAPI Web 服务（内嵌 uvicorn）
+│   ├── server.py           # FastAPI Web 服务（内嵌 uvicorn）
+│   └── templates/          # Jinja2 HTML 模板
+│       ├── base.html       # 基础布局
+│       ├── index.html      # 图书列表
+│       ├── book_detail.html# 图书详情
+│       ├── cover_wall.html # 封面墙
+│       ├── add.html        # 添加图书
+│       ├── edit.html       # 编辑图书
+│       ├── stats.html      # 统计页面
+│       └── error.html      # 错误页面
+├── tests/                  # 测试套件
+│   ├── conftest.py         # pytest fixtures
+│   ├── unit/               # 单元测试
+│   └── integration/        # 集成测试
 ├── books.db                # SQLite 数据库（当前被 git 追踪；日常数据变更勿随手提交）
 ├── backups/                # 自动备份目录（已 gitignore）
 ├── covers/                 # 封面本地缓存（已 gitignore）
@@ -98,6 +152,11 @@ python main.pyw         # 无控制台窗口（Windows）
 ┌──────────────────────────────────────┐
 │           UI 层 (PyQt6)              │
 │  MainWindow (Mediator)               │
+│    ├── components/                   │
+│    │   ├── BookFormWidget (编辑表单) │
+│    │   ├── SearchBarWidget (搜索栏)  │
+│    │   ├── ToolBarWidget (工具栏)    │
+│    │   └── WebManager (Web 服务管理) │
 │    ├── BookTableModel (表格模型)      │
 │    ├── CoverWallWidget (封面墙)       │
 │    ├── DetailDialog (详情 + 封面)     │
@@ -105,23 +164,50 @@ python main.pyw         # 无控制台窗口（Windows）
 │    ├── StatsDialog (matplotlib 统计)  │
 │    └── Theme (DARK / LIGHT QSS)      │
 ├──────────────────────────────────────┤
+│           Config 层                  │
+│    ConfigManager (配置管理器)        │
+│    ConfigSchema (验证模式)           │
+│    EnvLoader (环境变量)              │
+├──────────────────────────────────────┤
 │            Service 层                │
 │    DoubanService (豆瓣 API)          │
 │    BackupService (定时备份 + 清理)   │
 │    UndoManager (命令模式撤销)        │
 │    CSV Service (load / save)         │
 ├──────────────────────────────────────┤
+│            Core 层                   │
+│    Book (dataclass 领域模型)          │
+│    BaseModel (通用序列化)            │
+├──────────────────────────────────────┤
 │            Data 层                   │
 │    BookRepo (Repository + SQLite WAL)│
-│    Book (dataclass 领域模型)          │
 ├──────────────────────────────────────┤
 │        Web 层 (FastAPI)              │
 │    BookWebServer (内嵌 uvicorn)      │
+│    templates/ (Jinja2 HTML 模板)     │
 │    路由: / /cover-wall /add /edit    │
 │    /delete /book /cover /stats       │
+├──────────────────────────────────────┤
+│           Tests 层                   │
+│    unit/ (单元测试)                  │
+│    integration/ (集成测试)           │
 └──────────────────────────────────────┘
 ```
 
 MainWindow 作为中央协调者，通过 Qt 信号-槽连接各模块。网络与 CSV 导入在后台线程执行；封面墙回调经信号回到主线程。
 
-无测试 / 无 CI / 无类型检查——改动后以手工运行验证。每次代码改动完成后按约定 `git add -A && git commit`（英文提交说明）。
+### 测试
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v                    # 运行所有测试
+pytest tests/ -v -m unit           # 仅单元测试
+pytest tests/ -v -m integration    # 仅集成测试
+```
+
+测试覆盖：配置系统、数据库操作、数据模型、撤销命令、UI 组件、Web 模板。
+
+### 开发规范
+
+- 每次代码改动完成后按约定 `git add -A && git commit`（英文提交说明）
+- 开发依赖：pytest、black、flake8、mypy（见 `requirements-dev.txt`）
