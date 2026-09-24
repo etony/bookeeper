@@ -858,7 +858,8 @@ class MainWindow(QMainWindow):
       txt = f'已筛选 {visible}/{total} 条记录'
 
     # Web服务状态
-    web_status = '● Web 运行中' if self._web_manager.is_running else '○ Web 已停止'
+    web_running = getattr(self, '_web_manager', None) and self._web_manager.is_running
+    web_status = '● Web 运行中' if web_running else '○ Web 已停止'
 
     # 主题模式
     theme_mode = '暗色' if self._dark_mode else '亮色'
