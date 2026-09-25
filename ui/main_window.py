@@ -796,6 +796,7 @@ class MainWindow(QMainWindow):
       self._cover_wall.set_books(self._repo.get_all())
     s = self._settings()
     s.setValue('darkMode', self._dark_mode)
+    self._update_status()  # 刷新状态栏中的主题名称
 
   def _show_about(self):
     """显示关于对话框"""
