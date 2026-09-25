@@ -34,7 +34,7 @@ class TestBookFormWidget:
         from ui.components.book_form import BookFormWidget
         widget = BookFormWidget()
         assert widget is not None
-        assert widget.title() == '📖 图书信息'
+        assert widget.title() == '图书信息'
 
     def test_get_form_data_empty(self, app):
         """测试空表单数据"""
@@ -243,25 +243,25 @@ class TestToolBarWidget:
         from ui.components.tool_bar import ToolBarWidget
         widget = ToolBarWidget()
         widget.set_web_running(True)
-        assert widget._btn_web.text() == '🛑 停止服务'
+        assert widget._btn_web.text() == ' 停止服务'
         widget.set_web_running(False)
-        assert widget._btn_web.text() == '🌐 Web 服务'
+        assert widget._btn_web.text() == ' Web 服务'
 
     def test_set_web_starting(self, app):
         """测试设置Web启动中状态"""
         from ui.components.tool_bar import ToolBarWidget
         widget = ToolBarWidget()
         widget.set_web_starting()
-        assert widget._btn_web.text() == '⏳ 启动中...'
+        assert widget._btn_web.text() == ' 启动中...'
 
     def test_set_cover_wall_mode(self, app):
         """测试设置封面墙模式"""
         from ui.components.tool_bar import ToolBarWidget
         widget = ToolBarWidget()
         widget.set_cover_wall_mode(True)
-        assert widget._btn_cover_wall.text() == '📊 表格视图'
+        assert widget._btn_cover_wall.text() == ' 表格视图'
         widget.set_cover_wall_mode(False)
-        assert widget._btn_cover_wall.text() == '🖼️ 封面墙'
+        assert widget._btn_cover_wall.text() == ' 封面墙'
 
 
 # ══════════════════════════════════════════════

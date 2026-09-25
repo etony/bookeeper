@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 
 from config import Config
 from core.models.book import Book
-from ui.theme import ACCENT
+from ui.theme import ACCENT, DARK_BG, DARK_FG, LIGHT_BG, LIGHT_FG
 
 
 def _is_dark_theme() -> bool:
@@ -32,6 +32,14 @@ def _is_dark_theme() -> bool:
   palette = app.palette()
   bg = palette.color(palette.ColorRole.Window)
   return bg.lightness() < 128
+
+
+def _card_colors() -> tuple:
+  """返回 (卡片背景, 边框, 封面背景, 封面边框, 次要文字) 元组"""
+  dark = _is_dark_theme()
+  if dark:
+    return '#2a2a2e', '#3a3a40', '#2c2c31', '#3a3a40', '#9a9aa0'
+  return '#ffffff', '#d8d6d0', '#f0eeea', '#d8d6d0', '#6a6a6a'
 
 
 class CoverDownloadPool:
@@ -84,10 +92,15 @@ class CoverCard(QFrame):
         self._setup_ui()
 
     def _setup_ui(self):
-        """构建卡片界面"""
-        self.setFixedSize(150, 230)
+        """构建卡片界面（响应式：最小尺寸 + 自动伸缩）"""
+        self.setMinimumSize(130, 200)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.setFrameShape(QFrame.Shape.Box)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 支持键盘聚焦
+        self.setAccessibleName(self._book.title or '图书卡片')
+        self.setAccessibleDescription(
+          f'《{self._book.title}》，作者 {self._book.author}，状态 {self._book.status}')
         self._update_style(False)
 
         layout = QVBoxLayout(self)
@@ -114,15 +127,15 @@ class CoverCard(QFrame):
         else:
             self._rating_label.hide()
 
-        # 封面图片
+        # 封面图片（可伸缩）
         self._cover_label = QLabel('加载中...')
-        self._cover_label.setFixedSize(140, 180)
+        self._cover_label.setMinimumSize(100, 140)
         self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dark = _is_dark_theme()
         cover_border = '#3a3a40' if dark else '#d8d6d0'
         cover_bg = '#2c2c31' if dark else '#f0eeea'
         self._cover_label.setStyleSheet(f'border: 1px solid {cover_border}; border-radius: 4px; background-color: {cover_bg};')
-        layout.addWidget(self._cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._cover_label, stretch=1)
 
         # 书名
         from PyQt6.QtGui import QFontMetrics
@@ -153,14 +166,19 @@ class CoverCard(QFrame):
 
     def _update_style(self, hovered: bool):
         """更新卡片边框样式（跟随主题）"""
-        from ui.theme import ACCENT
-        dark = _is_dark_theme()
-        bg = '#2a2a2e' if dark else '#ffffff'
-        border = '#3a3a40' if dark else '#d8d6d0'
+        bg, border, _, _, _ = _card_colors()
         if hovered:
             self.setStyleSheet(f'QFrame {{ border: 2px solid {ACCENT}; border-radius: 6px; background-color: {bg}; }}')
         else:
             self.setStyleSheet(f'QFrame {{ border: 1px solid {border}; border-radius: 6px; background-color: {bg}; }}')
+
+    def keyPressEvent(self, event):
+        """键盘事件：Enter/空格 打开详情"""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.double_clicked.emit(self._book.isbn)
+        elif event.key() in (Qt.Key.Key_E, Qt.Key.Key_F2):
+            self.clicked.emit(self._book.isbn)
+        super().keyPressEvent(event)
 
     def _load_cover(self):
         """加载封面图片"""
@@ -202,7 +220,7 @@ class CoverCard(QFrame):
         self._set_cover_from_data(data)
 
     def _set_cover_from_data(self, data: bytes):
-        """从图片数据设置封面"""
+        """从图片数据设置封面（按标签当前尺寸缩放）"""
         if not data:
             self._cover_label.setText('加载失败')
             return
@@ -211,7 +229,9 @@ class CoverCard(QFrame):
             self._cover_label.setText('加载失败')
             return
         pixmap = QPixmap.fromImage(img)
-        scaled = pixmap.scaled(138, 178, Qt.AspectRatioMode.KeepAspectRatio,
+        label_size = self._cover_label.size()
+        scaled = pixmap.scaled(label_size.width() - 4, label_size.height() - 4,
+                              Qt.AspectRatioMode.KeepAspectRatio,
                               Qt.TransformationMode.SmoothTransformation)
         self._cover_label.setPixmap(scaled)
 
@@ -260,6 +280,10 @@ class CoverWallWidget(QWidget):
         self._columns = 5  # 每行显示的图书数量
         self._auto_columns = True  # 自动列数模式
         self._empty_label = None
+        self._current_index = 0  # 键盘导航当前索引
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName('封面墙')
+        self.setAccessibleDescription('以封面网格展示图书，支持键盘方向键导航')
         self._setup_ui()
 
     def _setup_ui(self):
@@ -277,6 +301,7 @@ class CoverWallWidget(QWidget):
         self._sort_combo = QComboBox()
         self._sort_combo.addItems(['书名', '评分', '添加时间', '购书日期'])
         self._sort_combo.setFixedHeight(34)
+        self._sort_combo.setAccessibleName('排序方式')
         self._sort_combo.currentTextChanged.connect(self._on_sort_changed)
         toolbar.addWidget(self._sort_combo)
 
@@ -285,14 +310,16 @@ class CoverWallWidget(QWidget):
         self._columns_combo.addItems(['自动', '3', '4', '5', '6', '7', '8'])
         self._columns_combo.setCurrentText('自动')
         self._columns_combo.setFixedHeight(34)
+        self._columns_combo.setAccessibleName('每行数量')
         self._columns_combo.currentTextChanged.connect(self._on_columns_changed)
         toolbar.addWidget(self._columns_combo)
 
         toolbar.addStretch()
         self._count_label = QLabel('')
         dark = _is_dark_theme()
-        label_color = '#9a9aa0' if dark else '#6a6a6a'
+        label_color = DARK_FG if dark else LIGHT_FG
         self._count_label.setStyleSheet(f'color: {label_color}; font-size: 12px;')
+        self._count_label.setAccessibleName('图书计数')
         toolbar.addWidget(self._count_label)
 
         layout.addLayout(toolbar)
@@ -333,10 +360,11 @@ class CoverWallWidget(QWidget):
         # 空状态提示
         if not self._books:
             dark = _is_dark_theme()
-            text_color = '#9a9aa0' if dark else '#6a6a6a'
+            text_color = DARK_FG if dark else LIGHT_FG
             self._empty_label = QLabel('暂无图书，点击工具栏添加')
             self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._empty_label.setStyleSheet(f'color: {text_color}; font-size: 14px; padding: 40px;')
+            self._empty_label.setAccessibleName('空状态提示')
             self._grid_layout.addWidget(self._empty_label, 0, 0, 1, self._columns)
             self._count_label.setText('共 0 本')
             return
@@ -413,6 +441,43 @@ class CoverWallWidget(QWidget):
         super().resizeEvent(event)
         if self._auto_columns:
             self._update_auto_columns()
+
+    def keyPressEvent(self, event):
+        """键盘导航：方向键移动卡片选择，Enter 打开详情"""
+        if not self._cards:
+            super().keyPressEvent(event)
+            return
+        key = event.key()
+        old_index = self._current_index
+        if key == Qt.Key.Key_Right:
+            self._current_index = min(self._current_index + 1, len(self._cards) - 1)
+        elif key == Qt.Key.Key_Left:
+            self._current_index = max(self._current_index - 1, 0)
+        elif key == Qt.Key.Key_Down:
+            self._current_index = min(self._current_index + self._columns, len(self._cards) - 1)
+        elif key == Qt.Key.Key_Up:
+            self._current_index = max(self._current_index - self._columns, 0)
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            if 0 <= self._current_index < len(self._cards):
+                self._cards[self._current_index].double_clicked.emit(
+                    self._cards[self._current_index]._book.isbn)
+                return
+        elif key == Qt.Key.Key_Escape:
+            # Esc 切换回表格视图的信号由主窗口处理
+            super().keyPressEvent(event)
+            return
+        else:
+            super().keyPressEvent(event)
+            return
+
+        # 更新焦点卡片
+        if 0 <= old_index < len(self._cards):
+            self._cards[old_index]._update_style(False)
+        if 0 <= self._current_index < len(self._cards):
+            card = self._cards[self._current_index]
+            card._update_style(True)
+            card.setFocus()
+            card.raise_()  # 确保焦点卡片在最上层
 
     def _on_card_clicked(self, isbn: str):
         """卡片点击事件"""

@@ -10,7 +10,6 @@
 
 import os
 import base64
-import webbrowser
 
 import pandas as pd
 from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, QByteArray, pyqtSignal
@@ -215,17 +214,38 @@ class MainWindow(QMainWindow):
     """封面墙双击打开图书详情事件"""
     self._open_detail(isbn)
 
-  def _on_cover_wall_context_menu(self, isbn: str, pos):
-    """封面墙右键菜单事件"""
+  def _make_book_menu(self, isbn_list: list, pos, has_batch: bool = False):
+    """
+    创建图书右键菜单（表格/封面墙共用工厂）。
+
+    返回选中的 action，由调用方处理执行逻辑。
+    """
     menu = QMenu(self)
-    view_action = QAction(QIcon(), '📖 查看详情', self)
-    edit_action = QAction(QIcon(), '✏️ 编辑', self)
-    delete_action = QAction(QIcon(), '🗑 删除', self)
+    view_action = QAction('查看详情', self)
+    edit_action = QAction('编辑', self)
+    delete_action = QAction(f'删除{"选中" if len(isbn_list) > 1 else ""}', self)
+
+    batch_menu = QMenu('批量操作', menu)
+    for status in Config.STATUSES:
+      action = QAction(f'设为"{status}"', batch_menu)
+      action.setData(('status', status))
+      batch_menu.addAction(action)
+
     menu.addAction(view_action)
     menu.addAction(edit_action)
+    if has_batch:
+      menu.addSeparator()
+      menu.addMenu(batch_menu)
     menu.addSeparator()
     menu.addAction(delete_action)
+
     action = menu.exec(pos)
+    return action, view_action, edit_action, delete_action
+
+  def _on_cover_wall_context_menu(self, isbn: str, pos):
+    """封面墙右键菜单事件"""
+    action, view_action, edit_action, delete_action = self._make_book_menu(
+      [isbn], pos, has_batch=False)
     if action == view_action:
       self._open_detail(isbn)
     elif action == edit_action:
@@ -235,7 +255,7 @@ class MainWindow(QMainWindow):
     elif action == delete_action:
       ret = QMessageBox.question(
         self, '确认删除',
-        f'确定删除图书？可通过 Ctrl+Z 撤销。',
+        '确定删除这本图书？可通过 Ctrl+Z 撤销。',
       )
       if ret == QMessageBox.StandardButton.Yes:
         book = self._repo.get_by_isbn(isbn)
@@ -346,15 +366,17 @@ class MainWindow(QMainWindow):
       return
 
     if len(raw_isbn) == 13 and not is_valid_isbn13(raw_isbn):
-      QMessageBox.warning(self, '错误', f'ISBN-13 校验位无效: {raw_isbn}')
+      QMessageBox.warning(self, 'ISBN 格式错误',
+        f'ISBN-13 校验位无效：{raw_isbn}\n\n请检查数字是否输入正确（13位数字）。')
       return
     if len(raw_isbn) == 10 and not is_valid_isbn10(raw_isbn):
-      QMessageBox.warning(self, '错误', f'ISBN-10 校验位无效: {raw_isbn}')
+      QMessageBox.warning(self, 'ISBN 格式错误',
+        f'ISBN-10 校验位无效：{raw_isbn}\n\n请检查数字或末位校验码（X/x 表示 10）。')
       return
 
     # 禁用按钮，显示加载状态
     self._book_form.set_fetch_enabled(False)
-    self._book_form.set_fetch_text('⏳ 查询中...')
+    self._book_form.set_fetch_text('查询中...')
     self.statusBar().showMessage('正在查询豆瓣...')
 
     # 异步执行查询
@@ -403,8 +425,9 @@ class MainWindow(QMainWindow):
     """豆瓣查询失败回调"""
     # 恢复按钮状态
     self._book_form.set_fetch_enabled(True)
-    self._book_form.set_fetch_text('🌐 获取信息')
-    QMessageBox.warning(self, '错误', f'查询出错: {error_msg}')
+    self._book_form.set_fetch_text('获取信息')
+    QMessageBox.warning(self, '查询失败',
+      f'无法从豆瓣获取图书信息：\n{error_msg}\n\n请检查网络连接后重试。')
     self.statusBar().showMessage('查询失败')
 
   def _update_book(self):
@@ -414,7 +437,7 @@ class MainWindow(QMainWindow):
     isbn = self._book_form.get_isbn()
     title = self._book_form.get_form_data()['title']
     if not isbn and not title:
-      QMessageBox.warning(self, '提示', '请至少填写 ISBN 或书名')
+      QMessageBox.warning(self, '信息不完整', '请至少填写 ISBN 或书名，然后再点击更新。')
       return
     
     row_data = self._book_form.get_row_data()
@@ -437,7 +460,10 @@ class MainWindow(QMainWindow):
     self.statusBar().showMessage('已更新')
 
   def _on_row_clicked(self, index):
-    """点击表格行时，将选中行数据填充到表单"""
+    """点击表格行时，选中整行并将数据填充到表单"""
+    # 选中整行，保持视觉选中与表单数据同步
+    self._table.selectRow(index.row())
+
     def val(col):
       v = index.sibling(index.row(), col).data()
       return str(v) if v is not None else ''
@@ -487,29 +513,11 @@ class MainWindow(QMainWindow):
         isbn_list.append(str(v))
     if not isbn_list:
       return
-    menu = QMenu(self)
-    view_action = QAction(QIcon(), '📖 查看详情', self)
-    edit_action = QAction(QIcon(), '✏️ 编辑', self)
-    delete_action = QAction(QIcon(), '🗑 删除选中', self)
-
-    # 批量操作子菜单
-    batch_menu = QMenu('批量操作', menu)
-    for status in Config.STATUSES:
-      action = QAction(QIcon(), f'设为"{status}"', batch_menu)
-      action.setData(('status', status))
-      batch_menu.addAction(action)
-
-    menu.addAction(view_action)
-    menu.addAction(edit_action)
-    menu.addSeparator()
-    menu.addMenu(batch_menu)
-    menu.addSeparator()
-    menu.addAction(delete_action)
-
-    action = menu.exec(self._table.mapToGlobal(pos))
-    if action == view_action and isbn_list:
+    action, view_action, edit_action, delete_action = self._make_book_menu(
+      isbn_list, self._table.mapToGlobal(pos), has_batch=True)
+    if action == view_action:
       self._open_detail(isbn_list[0])
-    elif action == edit_action and isbn_list:
+    elif action == edit_action:
       self._load_by_isbn(isbn_list[0])
     elif action and action.data() and action.data()[0] == 'status':
       new_status = action.data()[1]
@@ -609,7 +617,8 @@ class MainWindow(QMainWindow):
       from services.data import load_csv
       df = load_csv(path)
     except Exception as e:
-      QMessageBox.warning(self, '错误', f'读取 CSV 失败: {e}')
+      QMessageBox.warning(self, '导入失败',
+        f'无法读取 CSV 文件：\n{e}\n\n请确认文件格式正确（UTF-8 编码），或选择其他文件。')
       return
 
     self._toolbar.set_load_enabled(False)
@@ -659,9 +668,10 @@ class MainWindow(QMainWindow):
       df = self._repo.export_df()
       from services.data import save_csv
       save_csv(path, df)
-      QMessageBox.information(self, '提示', '保存成功')
+      QMessageBox.information(self, '导出成功', 'CSV 文件已保存。')
     except Exception as e:
-      QMessageBox.warning(self, '错误', f'保存失败: {e}')
+      QMessageBox.warning(self, '导出失败',
+        f'无法保存 CSV 文件：\n{e}\n\n请检查文件路径是否可写，或选择其他位置。')
 
   def _restore_backup(self):
     """从备份恢复数据库"""
@@ -675,6 +685,8 @@ class MainWindow(QMainWindow):
     layout = QVBoxLayout(dlg)
     layout.addWidget(QLabel('选择要恢复的备份（当前数据会自动保存一份）：'))
     listw = QListWidget()
+    listw.setAccessibleName('备份文件列表')
+    listw.setAccessibleDescription('选择要恢复的备份文件，双击或点击确定恢复')
     for path, name in backups:
       # 解析文件大小和修改时间
       try:
@@ -698,6 +710,9 @@ class MainWindow(QMainWindow):
     buttons.accepted.connect(dlg.accept)
     buttons.rejected.connect(dlg.reject)
     layout.addWidget(buttons)
+    # Esc 关闭对话框
+    from PyQt6.QtGui import QShortcut, QKeySequence
+    QShortcut(QKeySequence('Esc'), dlg, dlg.reject)
     if dlg.exec() != QDialog.DialogCode.Accepted:
       return
     item = listw.currentItem()
@@ -714,9 +729,10 @@ class MainWindow(QMainWindow):
       self._dirty = False
       self._undo_manager.clear()  # 清空撤销栈，避免回退到恢复前的状态
       self._load_data()
-      QMessageBox.information(self, '提示', '恢复成功')
+      QMessageBox.information(self, '恢复成功', '数据库已从备份恢复。')
     else:
-      QMessageBox.warning(self, '错误', '恢复失败')
+      QMessageBox.warning(self, '恢复失败',
+        '无法从备份恢复数据库。\n\n可能原因：备份文件损坏或磁盘空间不足。\n请检查备份文件后重试。')
 
   def _show_stats(self):
     """打开统计面板"""
@@ -742,11 +758,11 @@ class MainWindow(QMainWindow):
       self._web_manager.start_server()
 
   def _on_web_started(self):
-    """Web 服务启动成功：更新按钮状态，在浏览器中打开"""
+    """Web 服务启动成功：更新按钮状态，状态栏显示地址"""
     url = f'http://127.0.0.1:{Config.WEB_PORT}'
     self._toolbar.set_web_running(True)
-    self.statusBar().showMessage(f'Web 服务已启动: {url}')
-    webbrowser.open(url)
+    self.statusBar().showMessage(f'Web 服务已启动: {url}（在浏览器打开请访问此地址）')
+    # 不再强制打开浏览器——用户可能只想后台运行服务
 
   def _on_web_stopped(self):
     """Web 服务已停止"""

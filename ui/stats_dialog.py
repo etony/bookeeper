@@ -40,6 +40,7 @@ class StatsDialog(QDialog):
     self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     self.setWindowTitle('📊 统计面板')
     self.resize(680, 500)
+    self.setMinimumSize(500, 400)
     self._repo = repo
     self._dark_mode = dark_mode
 
@@ -51,6 +52,10 @@ class StatsDialog(QDialog):
     tabs.addTab(self._make_publisher_chart(), '出版社分布')
     tabs.addTab(self._make_rating_chart(), '评分分布')
     layout.addWidget(tabs)
+
+    # Esc 关闭对话框
+    from PyQt6.QtGui import QShortcut, QKeySequence
+    QShortcut(QKeySequence('Esc'), self, self.close)
 
   def _style_ax(self, ax):
     """

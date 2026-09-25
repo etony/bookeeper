@@ -90,6 +90,7 @@ class DetailDialog(QDialog):
     """
     self.setWindowTitle('图书详情')
     self.resize(*Config.DETAIL_DIALOG_SIZE)
+    self.setMinimumSize(500, 400)
     layout = QVBoxLayout(self)
     layout.setContentsMargins(*DIALOG_MARGINS)
     layout.setSpacing(DIALOG_SPACING)
@@ -97,12 +98,14 @@ class DetailDialog(QDialog):
     # ── 顶部：翻页按钮 + 页码 ───────────────────────────
     nav = QHBoxLayout()
     nav.setSpacing(DIALOG_SPACING)
-    self._prev_btn = QPushButton('◀ 上一本')
-    self._next_btn = QPushButton('下一本 ▶')
+    self._prev_btn = QPushButton('上一本')
+    self._next_btn = QPushButton('下一本')
     self._page_label = QLabel('')
     self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    self._prev_btn.setToolTip('查看上一本图书')
-    self._next_btn.setToolTip('查看下一本图书')
+    self._prev_btn.setToolTip('查看上一本图书 (← 或 ↑)')
+    self._next_btn.setToolTip('查看下一本图书 (→ 或 ↓)')
+    self._prev_btn.setAccessibleName('上一本图书')
+    self._next_btn.setAccessibleName('下一本图书')
     self._prev_btn.clicked.connect(self._prev)
     self._next_btn.clicked.connect(self._next)
     nav.addWidget(self._prev_btn)
@@ -110,29 +113,36 @@ class DetailDialog(QDialog):
     nav.addWidget(self._next_btn)
     layout.addLayout(nav)
 
-    # 键盘快捷键翻页
+    # 键盘快捷键翻页 + 关闭
     QShortcut(QKeySequence('Left'), self, self._prev)
     QShortcut(QKeySequence('Right'), self, self._next)
     QShortcut(QKeySequence('Up'), self, self._prev)
     QShortcut(QKeySequence('Down'), self, self._next)
+    QShortcut(QKeySequence('Home'), self, lambda: self._goto(0))
+    QShortcut(QKeySequence('End'), self, lambda: self._goto(len(self._isbn_list) - 1))
+    QShortcut(QKeySequence('Esc'), self, self.close)
 
     # ── 内容区：封面 + 信息 ──────────────────────────────
     content = QHBoxLayout()
     content.setSpacing(DIALOG_SPACING)
 
-    # 左侧：封面
+    # 左侧：封面（最小尺寸 + 可缩放）
     self._cover = QLabel('无封面')
-    self._cover.setFixedSize(200, 280)
+    self._cover.setMinimumSize(160, 224)
+    self._cover.setMaximumSize(280, 392)
     self._cover.setScaledContents(True)
     self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self._cover.setStyleSheet(
       'border: 1px solid; border-radius: 4px; font-size: 13px;')
+    self._cover.setAccessibleName('图书封面')
+    self._cover.setToolTip('图书封面图片')
     content.addWidget(self._cover)
 
     # 右侧：信息
     self._info = QTextBrowser()
     self._info.setOpenExternalLinks(True)    # 点击链接自动在浏览器打开
     self._info.setMinimumWidth(300)
+    self._info.setAccessibleName('图书详细信息')
     content.addWidget(self._info)
 
     layout.addLayout(content, stretch=1)
@@ -261,10 +271,21 @@ class DetailDialog(QDialog):
 
   def _prev(self):
     """上一本"""
+    if not self._isbn_list:
+      return
     self._index = (self._index - 1) % len(self._isbn_list)
     self._load_current()
 
   def _next(self):
     """下一本"""
+    if not self._isbn_list:
+      return
     self._index = (self._index + 1) % len(self._isbn_list)
+    self._load_current()
+
+  def _goto(self, index: int):
+    """跳转到指定索引"""
+    if not self._isbn_list:
+      return
+    self._index = index % len(self._isbn_list)
     self._load_current()

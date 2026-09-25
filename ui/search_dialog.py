@@ -75,6 +75,7 @@ class SearchDialog(QDialog):
     """
     self.setWindowTitle('豆瓣图书搜索')
     self.resize(*Config.SEARCH_DIALOG_SIZE)
+    self.setMinimumSize(600, 350)
     layout = QVBoxLayout(self)
     layout.setContentsMargins(*DIALOG_MARGINS)
     layout.setSpacing(DIALOG_SPACING)
@@ -84,11 +85,14 @@ class SearchDialog(QDialog):
     top.setSpacing(DIALOG_SPACING)
     self._input = QLineEdit()
     self._input.setPlaceholderText('输入书名关键词，回车搜索...')
+    self._input.setAccessibleName('搜索关键词')
+    self._input.setAccessibleDescription('输入书名关键词后按回车搜索豆瓣图书')
     self._input.returnPressed.connect(self._search)
     top.addWidget(self._input, stretch=1)
-    self._search_btn = QPushButton('🔎 搜索')
+    self._search_btn = QPushButton('搜索')
     self._search_btn.setFixedWidth(100)
     self._search_btn.setToolTip('搜索豆瓣图书')
+    self._search_btn.setAccessibleName('搜索按钮')
     self._search_btn.clicked.connect(self._search)
     top.addWidget(self._search_btn)
     self._loading = QLabel('')
@@ -103,6 +107,8 @@ class SearchDialog(QDialog):
     self._table.setAlternatingRowColors(True)
     self._table.setSortingEnabled(True)
     self._table.verticalHeader().setVisible(False)
+    self._table.setAccessibleName('搜索结果表格')
+    self._table.setAccessibleDescription('显示豆瓣搜索结果，双击行选择图书')
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     hdr.setStretchLastSection(True)
@@ -111,6 +117,10 @@ class SearchDialog(QDialog):
     hdr.resizeSection(2, 120)
     self._table.doubleClicked.connect(self._on_double_click)
     layout.addWidget(self._table)
+
+    # 键盘：Esc 关闭对话框
+    from PyQt6.QtGui import QShortcut, QKeySequence
+    QShortcut(QKeySequence('Esc'), self, self.close)
 
   def set_keyword(self, keyword: str):
     """预填搜索关键词（主窗口传入当前选中的书名）"""

@@ -22,6 +22,8 @@ class SearchBarWidget(QGroupBox):
 
   def __init__(self, parent=None):
     super().__init__('🔎 搜索', parent)
+    self.setAccessibleName('搜索栏')
+    self.setAccessibleDescription('图书搜索栏，支持关键词和状态筛选')
     self._setup_ui()
 
   def _setup_ui(self):
@@ -33,6 +35,8 @@ class SearchBarWidget(QGroupBox):
     self._search_input = QLineEdit()
     self._search_input.setPlaceholderText('输入关键词搜索书名/作者/出版社/ISBN')
     self._search_input.setFixedHeight(34)
+    self._search_input.setAccessibleName('搜索关键词')
+    self._search_input.setAccessibleDescription('输入关键词搜索书名、作者、出版社或ISBN')
     row.addWidget(self._search_input, stretch=1)
 
     row.addWidget(QLabel('状态'))
@@ -40,16 +44,19 @@ class SearchBarWidget(QGroupBox):
     self._search_status.addItems(['全部'] + Config.STATUSES)
     self._search_status.setCurrentIndex(0)
     self._search_status.setFixedHeight(34)
+    self._search_status.setAccessibleName('状态筛选')
     row.addWidget(self._search_status)
 
     self._btn_search = QPushButton('🔎 查询')
     self._btn_search.setFixedHeight(34)
+    self._btn_search.setAccessibleName('搜索按钮')
     self._btn_reset = QPushButton('⟲ 重置')
     self._btn_reset.setFixedHeight(34)
+    self._btn_reset.setAccessibleName('重置搜索')
     row.addWidget(self._btn_search)
     row.addWidget(self._btn_reset)
 
-    # 防抖定时器：输入变化后 300ms 自动触发搜索
+    # 防抖定时器：输入停止 300ms 后自动搜索（不改变按钮文字）
     self._search_timer = QTimer(self)
     self._search_timer.setSingleShot(True)
     self._search_timer.timeout.connect(self._on_search)
@@ -100,11 +107,11 @@ class SearchBarWidget(QGroupBox):
     self.reset_requested.emit()
 
   def _on_search_text_changed(self, text: str):
-    """搜索文本变化时重置定时器（防抖 300ms）"""
+    """搜索文本变化时重置定时器（防抖 300ms），不改变按钮文字"""
     self._search_timer.stop()
-    self._btn_search.setText('搜索中...')
     self._search_timer.start(300)
 
   def reset_search_button(self):
     """重置搜索按钮文字（搜索完成后调用）"""
     self._btn_search.setText('🔎 查询')
+    self._btn_search.setEnabled(True)

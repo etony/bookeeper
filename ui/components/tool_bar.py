@@ -61,24 +61,33 @@ class ToolBarWidget(QWidget):
 
     self._btn_load = QPushButton(make_import_icon(), ' 加载 CSV')
     self._btn_load.setToolTip('从 CSV 导入图书数据')
+    self._btn_load.setAccessibleName('加载CSV')
     self._btn_save = QPushButton(make_export_icon(), ' 保存 CSV')
     self._btn_save.setToolTip('导出全部数据为 CSV')
+    self._btn_save.setAccessibleName('保存CSV')
     self._btn_stats = QPushButton(make_stats_icon(), ' 统计')
     self._btn_stats.setToolTip('查看图书统计信息')
+    self._btn_stats.setAccessibleName('统计')
     self._btn_search_douban = QPushButton(make_search_icon(), ' 豆瓣搜索')
     self._btn_search_douban.setToolTip('从豆瓣搜索图书并添加 (Ctrl+D)')
+    self._btn_search_douban.setAccessibleName('豆瓣搜索')
     self._btn_cover_wall = QPushButton(make_cover_icon(), ' 封面墙')
     self._btn_cover_wall.setToolTip('切换到封面墙视图 (Ctrl+W)')
+    self._btn_cover_wall.setAccessibleName('封面墙视图切换')
     self._btn_web = QPushButton(make_web_icon(), ' Web 服务')
     self._btn_web.setToolTip('启动/停止内嵌 Web 服务')
+    self._btn_web.setAccessibleName('Web服务开关')
     self._btn_restore = QPushButton(make_restore_icon(), ' 恢复')
     self._btn_restore.setToolTip('从备份恢复数据库')
+    self._btn_restore.setAccessibleName('恢复备份')
     self._btn_theme = QPushButton(make_theme_icon(self._dark_mode), '')
     self._btn_theme.setFixedSize(38, 34)
     self._btn_theme.setToolTip('切换亮色/暗色主题')
+    self._btn_theme.setAccessibleName('切换主题')
     self._btn_about = QPushButton(make_about_icon(), '')
     self._btn_about.setFixedSize(38, 34)
     self._btn_about.setToolTip('关于 Bookeeper')
+    self._btn_about.setAccessibleName('关于')
 
     for btn in (self._btn_load, self._btn_save, self._btn_stats, self._btn_search_douban, self._btn_cover_wall, self._btn_web, self._btn_restore):
       btn.setFixedHeight(34)
@@ -144,22 +153,22 @@ class ToolBarWidget(QWidget):
   def set_cover_wall_mode(self, is_cover_wall: bool):
     """切换封面墙按钮文字"""
     if is_cover_wall:
-      self._btn_cover_wall.setText('📊 表格视图')
+      self._btn_cover_wall.setText(' 表格视图')
       self._btn_cover_wall.setToolTip('切换到表格视图 (Ctrl+W)')
     else:
-      self._btn_cover_wall.setText('🖼️ 封面墙')
+      self._btn_cover_wall.setText(' 封面墙')
       self._btn_cover_wall.setToolTip('切换到封面墙视图 (Ctrl+W)')
 
   def set_web_running(self, running: bool):
     """设置 Web 服务按钮状态"""
     if running:
-      self._btn_web.setText('🛑 停止服务')
+      self._btn_web.setText(' 停止服务')
     else:
-      self._btn_web.setText('🌐 Web 服务')
+      self._btn_web.setText(' Web 服务')
 
   def set_web_starting(self):
     """设置 Web 服务按钮为启动中状态"""
-    self._btn_web.setText('⏳ 启动中...')
+    self._btn_web.setText(' 启动中...')
 
   def set_load_enabled(self, enabled: bool):
     """设置加载按钮的启用状态"""

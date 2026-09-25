@@ -29,7 +29,9 @@ class BookFormWidget(QGroupBox):
   update_requested = pyqtSignal()
 
   def __init__(self, parent=None):
-    super().__init__('📖 图书信息', parent)
+    super().__init__('图书信息', parent)
+    self.setAccessibleName('图书信息编辑表单')
+    self.setAccessibleDescription('编辑图书的ISBN、书名、作者、出版社、价格、状态等信息')
     self._setup_ui()
 
   def _setup_ui(self):
@@ -44,11 +46,18 @@ class BookFormWidget(QGroupBox):
     r0.addWidget(QLabel('ISBN'))
     self._isbn_input = QLineEdit()
     self._isbn_input.setPlaceholderText('输入 ISBN（回车即查询豆瓣）')
+    self._isbn_input.setAccessibleName('ISBN输入框')
+    self._isbn_input.setAccessibleDescription('输入ISBN后按回车或点击获取信息按钮查询豆瓣')
     r0.addWidget(self._isbn_input, stretch=1)
-    self._btn_fetch = QPushButton('🌐 获取信息')
-    self._btn_new_clear = QPushButton('➕ 新增')
+    self._btn_fetch = QPushButton('获取信息')
+    self._btn_fetch.setToolTip('从豆瓣获取图书信息')
+    self._btn_fetch.setAccessibleName('获取图书信息按钮')
+    self._btn_new_clear = QPushButton('新增')
     self._btn_new_clear.setToolTip('清空表单，手动添加新图书')
-    self._btn_update = QPushButton('💾 更新记录')
+    self._btn_new_clear.setAccessibleName('新增清空按钮')
+    self._btn_update = QPushButton('更新记录')
+    self._btn_update.setToolTip('保存当前表单内容到数据库')
+    self._btn_update.setAccessibleName('更新记录按钮')
     for btn in (self._btn_fetch, self._btn_new_clear, self._btn_update):
       btn.setFixedHeight(34)
       r0.addWidget(btn)
@@ -56,17 +65,26 @@ class BookFormWidget(QGroupBox):
 
     # ── 第 2~3 行：改用 QGridLayout 保证列对齐 ──────────
     self._title_input = QLineEdit(placeholderText='书名')
+    self._title_input.setAccessibleName('书名')
     self._author_input = QLineEdit(placeholderText='作者/译者')
+    self._author_input.setAccessibleName('作者')
     self._publisher_input = QLineEdit(placeholderText='出版社')
+    self._publisher_input.setAccessibleName('出版社')
     self._price_input = QLineEdit(placeholderText='定价')
+    self._price_input.setAccessibleName('价格')
     self._rating_input = QLineEdit(placeholderText='评分/人数')
     self._rating_input.setReadOnly(True)
+    self._rating_input.setAccessibleName('评分')
     self._status_combo = QComboBox()
     self._status_combo.addItems(Config.STATUSES)
     self._status_combo.setCurrentIndex(-1)
+    self._status_combo.setAccessibleName('阅读状态')
     self._shelf_input = QLineEdit(placeholderText='位置')
+    self._shelf_input.setAccessibleName('书柜位置')
     self._start_date = QDateEdit()
     self._end_date = QDateEdit()
+    self._start_date.setAccessibleName('购书日期')
+    self._end_date.setAccessibleName('已读日期')
     for edit in (self._start_date, self._end_date):
       edit.setDisplayFormat('yyyy/M/d')
       edit.setCalendarPopup(False)
@@ -96,6 +114,16 @@ class BookFormWidget(QGroupBox):
     self._btn_new_clear.clicked.connect(self._on_new_clear_clicked)
     self._btn_update.clicked.connect(self.update_requested.emit)
     self._status_combo.currentTextChanged.connect(self._on_status_changed)
+
+    # Tab 键顺序：ISBN → 书名 → 作者 → 出版社 → 价格 → 状态 → 书柜 → 购书 → 已读
+    from PyQt6.QtWidgets import QWidget
+    for prev, nxt in zip(
+      [self._isbn_input, self._title_input, self._author_input, self._publisher_input,
+       self._price_input, self._status_combo, self._shelf_input, self._start_date],
+      [self._title_input, self._author_input, self._publisher_input, self._price_input,
+       self._status_combo, self._shelf_input, self._start_date, self._end_date],
+    ):
+      QWidget.setTabOrder(prev, nxt)
 
   # ══════════════════════════════════════════════
   #  公开方法
@@ -206,14 +234,12 @@ class BookFormWidget(QGroupBox):
     self._isbn_input.setFocus()
 
   def _on_status_changed(self, text: str):
-    """状态设为'已读'时自动填入日期，切回非'已读'时重置"""
+    """状态设为'已读'时自动填入日期（若为空），切回时不自动清空日期"""
     if text == '已读':
       if self._end_date.date() <= QDate(1900, 1, 1):
         self._end_date.setDate(QDate.currentDate())
       if self._start_date.date() <= QDate(1900, 1, 1):
         self._start_date.setDate(QDate.currentDate())
-    else:
-      self._end_date.setDate(QDate(1900, 1, 1))
 
   # ══════════════════════════════════════════════
   #  静态辅助
