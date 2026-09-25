@@ -54,8 +54,6 @@ class BookWebServer:
     self._on_started = on_started
     # 数据变更回调（Web端修改数据后通知GUI刷新）
     self._on_data_changed = on_data_changed
-    # 避免在详情页重复查询豆瓣 API（单次会话内有效）
-    self._douban_tried = set()
     # 配置Jinja2模板
     templates_dir = Path(__file__).parent / 'templates'
     self._templates = Jinja2Templates(directory=str(templates_dir))
@@ -152,12 +150,12 @@ class BookWebServer:
       return RedirectResponse(url='/', status_code=302)
 
     @app.get('/edit/{isbn}', response_class=HTMLResponse)
-    def edit_page(request: Request, isbn: str, sync: str = ''):
+    def edit_page(request: Request, isbn: str, synced: str = ''):
       """
       编辑图书页面。
 
-      支持 ?sync=1 从豆瓣同步最新数据。
-      同步后自动更新图书信息并保存到数据库。
+      synced=ok/fail 仅显示同步结果消息（同步本身是 POST /sync/{isbn}，
+      GET 请求不写数据库）。
       """
       book = self._repo.get_by_isbn(isbn)
       if not book:
@@ -167,35 +165,44 @@ class BookWebServer:
 
       msg = ''
       msg_type = ''
-      if sync == '1':
-        from services.douban import DoubanService
-        api_book = DoubanService().get_book_by_isbn(isbn)
-        if api_book:
-          book.title = api_book.title
-          book.author = api_book.author
-          book.publisher = api_book.publisher
-          book.price = api_book.price
-          book.rating = api_book.rating
-          book.raters = api_book.raters
-          book.cover_url = api_book.cover_url
-          book.pubdate = api_book.pubdate
-          book.douban_url = api_book.douban_url
-          book.pages = api_book.pages
-          self._repo.upsert(book)
-          if self._on_data_changed:
-            self._on_data_changed()
-          msg = '已从豆瓣同步图书信息'
-          msg_type = 'info'
-        else:
-          msg = '豆瓣未找到该 ISBN 对应的图书'
-          msg_type = 'err'
-      
+      if synced == 'ok':
+        msg = '已从豆瓣同步图书信息'
+        msg_type = 'info'
+      elif synced == 'fail':
+        msg = '豆瓣未找到该 ISBN 对应的图书'
+        msg_type = 'err'
+
       return self._templates.TemplateResponse(request, "edit.html", {
         "book": book,
         "msg": msg,
         "msg_type": msg_type,
         "statuses": Config.STATUSES,
       })
+
+    @app.post('/sync/{isbn}')
+    def sync_book(isbn: str, back: str = Form('/')):
+      """从豆瓣同步图书信息（POST，避免 GET 请求产生写副作用）"""
+      book = self._repo.get_by_isbn(isbn)
+      if not book:
+        return RedirectResponse(url='/', status_code=302)
+      from services.douban import DoubanService
+      api_book = DoubanService().get_book_by_isbn(isbn)
+      if api_book:
+        book.title = api_book.title
+        book.author = api_book.author
+        book.publisher = api_book.publisher
+        book.price = api_book.price
+        book.rating = api_book.rating
+        book.raters = api_book.raters
+        book.cover_url = api_book.cover_url
+        book.pubdate = api_book.pubdate
+        book.douban_url = api_book.douban_url
+        book.pages = api_book.pages
+        self._repo.upsert(book)
+        if self._on_data_changed:
+          self._on_data_changed()
+        return RedirectResponse(url=f'{back}?synced=ok', status_code=302)
+      return RedirectResponse(url=f'{back}?synced=fail', status_code=302)
 
     @app.post('/edit/{isbn}')
     def edit_submit(isbn: str, title: str = Form(''), author: str = Form(''),
@@ -247,12 +254,12 @@ class BookWebServer:
       return Response(content=data, media_type=media_type)
 
     @app.get('/book/{isbn}', response_class=HTMLResponse)
-    def book_detail(request: Request, isbn: str):
+    def book_detail(request: Request, isbn: str, synced: str = ''):
       """
       图书详情页。
 
       展示完整图书信息、上下本导航、推荐度。
-      如果数据库缺少封面 URL，尝试从豆瓣获取。
+      GET 不写数据库——同步信息走 POST /sync/{isbn}。
       """
       book = self._repo.get_by_isbn(isbn)
       if not book:
@@ -262,16 +269,11 @@ class BookWebServer:
 
       from core.models.book import Book as BookModel
 
-      # 如果缺少封面且之前没试过，尝试从豆瓣补充
-      if not book.cover_url and isbn not in self._douban_tried:
-        self._douban_tried.add(isbn)
-        from services.douban import DoubanService
-        api_book = DoubanService().get_book_by_isbn(isbn)
-        if api_book and api_book.cover_url:
-          book.cover_url = api_book.cover_url
-          if api_book.pubdate:
-            book.pubdate = api_book.pubdate
-          self._repo.upsert(book)
+      msg = ''
+      if synced == 'ok':
+        msg = '已从豆瓣同步图书信息'
+      elif synced == 'fail':
+        msg = '豆瓣未找到该 ISBN 对应的图书'
 
       # 获取全部 ISBN 列表，构造上下本导航
       all_books = self._repo.get_all()
@@ -289,9 +291,10 @@ class BookWebServer:
         ('出版年', book.pubdate),
         ('购书日期', book.start_date), ('已读日期', book.end_date),
       ]
-      
+
       return self._templates.TemplateResponse(request, "book_detail.html", {
         "book": book,
+        "msg": msg,
         "prev_link": prev_link,
         "next_link": next_link,
         "fields": fields,

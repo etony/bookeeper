@@ -8,7 +8,10 @@
 {% endif %}
 
 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
-  <a href="/edit/{{ book.isbn }}?sync=1" class="btn btn-primary">🌐 从豆瓣同步</a>
+  <form method="post" action="/sync/{{ book.isbn }}" style="display:inline">
+    <input type="hidden" name="back" value="/edit/{{ book.isbn }}">
+    <button type="submit" class="btn btn-primary">🌐 从豆瓣同步</button>
+  </form>
   <span style="color:var(--text2);font-size:13px">通过 ISBN 重新获取豆瓣数据</span>
 </div>
 

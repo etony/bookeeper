@@ -162,3 +162,33 @@ class TestDeprecatedConfig:
         assert mgr.config.douban.api_key_search == "0ac44ae016490db2204ce0a042db2916"
         assert mgr.config.backup.keep == 30
         assert mgr.config.backup.interval_ms == 300000
+
+    def test_legacy_key_names_compat(self):
+        """旧版 config.json 大写键名（DOUBAN_API_KEY）仍能被读取"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write('{"DOUBAN_API_KEY": "legacy_key_123"}')
+            path = f.name
+        try:
+            mgr = ConfigManager(path)
+            assert mgr.config.douban.api_key == "legacy_key_123"
+        finally:
+            os.unlink(path)
+
+    def test_init_config_applies_to_legacy_config(self):
+        """init_config 把配置回写到旧 Config 静态类（config.json/环境变量真正生效）"""
+        import json
+        # database_path 也写入：回写的 DB_PATH 必须仍是 conftest 钳制的临时库
+        isolated_db = Config.DB_PATH
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"web_port": 9100, "douban_api_key": "test_key_xyz",
+                       "backup_keep": 7, "database_path": isolated_db}, f)
+            path = f.name
+        try:
+            init_config(path)
+            assert Config.WEB_PORT == 9100
+            assert Config.DOUBAN_API_KEY == "test_key_xyz"
+            assert Config.BACKUP_KEEP == 7
+            assert Config.DB_PATH == isolated_db
+        finally:
+            os.unlink(path)
+        # conftest 的 _isolate_config 会在测试后还原 Config 静态类

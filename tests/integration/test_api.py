@@ -2,19 +2,7 @@
 import pytest
 from core.models.book import Book
 
-
-@pytest.fixture(autouse=True)
-def clean_db(client):
-    """每个测试前清空数据库，确保隔离"""
-    from services import get_repo
-    repo = get_repo()
-    # 防线：确认连的是 conftest 创建的临时库，绝不能清空真实 books.db
-    assert 'bookeeper_test' in repo._path, (
-        f'测试数据库路径异常: {repo._path}（conftest 的 DB_PATH 隔离补丁失效）'
-    )
-    with repo._conn() as conn:
-        conn.execute('DELETE FROM books')
-    yield
+# clean_db（每测试清库 + 隔离断言）统一在 tests/conftest.py 中定义
 
 
 def _add_book(client, isbn='9787544291163', title='百年孤独', author='加西亚·马尔克斯',

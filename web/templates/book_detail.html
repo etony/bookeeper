@@ -3,6 +3,9 @@
 {% block title %}{{ book.title }} - Bookeeper{% endblock %}
 
 {% block content %}
+{% if msg %}
+<div class="msg msg-info">{{ msg }}</div>
+{% endif %}
 <div style="display:flex;gap:24px;padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
     <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
         {% if book.cover_url %}
@@ -28,7 +31,14 @@
     
     <div style="flex:1;min-width:0">
         <h2 style="margin-top:0;margin-bottom:16px">📖 {{ book.title }}</h2>
-        <div style="margin-bottom:16px"><a href="/edit/{{ book.isbn }}">✏️ 编辑</a> | <a href="/">← 返回</a></div>
+        <div style="margin-bottom:16px">
+            <a href="/edit/{{ book.isbn }}">✏️ 编辑</a> |
+            <form method="post" action="/sync/{{ book.isbn }}" style="display:inline">
+                <input type="hidden" name="back" value="/book/{{ book.isbn }}">
+                <button type="submit" style="background:none;border:none;padding:0;color:var(--accent);cursor:pointer;font:inherit">从豆瓣同步</button>
+            </form> |
+            <a href="/">← 返回</a>
+        </div>
         
         <table style="width:100%;border-collapse:collapse">
             {% for key, value in fields %}

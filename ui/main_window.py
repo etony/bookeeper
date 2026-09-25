@@ -333,21 +333,22 @@ class MainWindow(QMainWindow):
     self._dirty = True
 
   def _do_backup(self):
-    """执行定时备份：无数据或数据无变更则跳过"""
-    if self._model.rowCount() == 0 or not self._dirty:
+    """执行定时备份：数据无变更则跳过（backup 内部还有 mtime 去重）"""
+    if not self._dirty:
       return
     self._dirty = False
     QTimer.singleShot(0, self._backup_svc.backup)
 
   def closeEvent(self, event):
-    """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 强制备份"""
+    """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 备份"""
     self._web_manager.cleanup()
     s = self._settings()
     geo = self.saveGeometry().data()
     if geo:
       s.setValue('windowGeometry', base64.b64encode(geo).decode('ascii'))
-    if self._model.rowCount():
-      self._backup_svc.backup()
+    # 无条件备份：backup 内部按 mtime 去重，不会产生冗余文件；
+    # 不能以 rowCount 为条件——搜索过滤为 0 行时也会有真实数据
+    self._backup_svc.backup()
     super().closeEvent(event)
 
   # ══════════════════════════════════════════════

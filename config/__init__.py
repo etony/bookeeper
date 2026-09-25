@@ -53,7 +53,9 @@ class Config:
 
 class ConfigManager:
     def __init__(self, config_path: str = None):
-        self._config_path = config_path or "config.json"
+        # 默认固定为项目根的 config.json（相对 CWD 会随启动目录漂移）
+        self._config_path = config_path or os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "config.json")
         self._config: AppConfig = None
         self._load_config()
     
@@ -63,11 +65,25 @@ class ConfigManager:
         # 1. 加载默认配置
         config_data.update(self._config_to_dict(DEFAULT_CONFIG))
         
-        # 2. 加载配置文件
+        # 2. 加载配置文件（首次运行生成默认配置，方便用户修改豆瓣 key 等）
+        if not os.path.exists(self._config_path):
+            try:
+                with open(self._config_path, "w", encoding="utf-8") as f:
+                    json.dump(self._config_to_dict(DEFAULT_CONFIG), f,
+                              ensure_ascii=False, indent=2)
+            except OSError as e:
+                logger.warning(f"生成默认配置文件失败: {e}")
         if os.path.exists(self._config_path):
             try:
                 with open(self._config_path, "r", encoding="utf-8") as f:
                     file_config = json.load(f)
+                    # 兼容旧版键名（旧 config.json 用 DOUBAN_API_KEY 大写格式）
+                    for old_key, new_key in (
+                        ("DOUBAN_API_KEY", "douban_api_key"),
+                        ("DOUBAN_API_KEY_SEARCH", "douban_api_key_search"),
+                    ):
+                        if old_key in file_config and new_key not in file_config:
+                            file_config[new_key] = file_config.pop(old_key)
                     config_data.update(file_config)
             except json.JSONDecodeError as e:
                 logger.warning(f"配置文件格式错误: {e}，将使用默认配置")
@@ -143,13 +159,34 @@ class ConfigManager:
 # 全局配置实例
 _config_manager: ConfigManager = None
 
+def _apply_to_legacy_config(cfg: AppConfig):
+    """
+    把 ConfigManager 的值回写到旧版 Config 静态类。
+
+    业务代码全部读 Config 静态类（douban.py/database.py 等 12 处），
+    不回写的话 config.json 和 BOOKEEPER_ 环境变量完全不生效。
+    """
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    path = cfg.database.path
+    if not os.path.isabs(path):
+        path = os.path.join(base_dir, path)
+    Config.DB_PATH = path
+    Config.WEB_PORT = cfg.web.port
+    Config.BACKUP_KEEP = cfg.backup.keep
+    Config.BACKUP_INTERVAL_MS = cfg.backup.interval_ms
+    Config.DOUBAN_API_KEY = cfg.douban.api_key
+    Config.DOUBAN_API_KEY_SEARCH = cfg.douban.api_key_search
+    Config.HEADERS = dict(cfg.douban.headers)
+
 def get_config() -> ConfigManager:
     global _config_manager
     if _config_manager is None:
         _config_manager = ConfigManager()
+        _apply_to_legacy_config(_config_manager.config)
     return _config_manager
 
 def init_config(config_path: str = None) -> ConfigManager:
     global _config_manager
     _config_manager = ConfigManager(config_path)
+    _apply_to_legacy_config(_config_manager.config)
     return _config_manager

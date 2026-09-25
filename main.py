@@ -45,8 +45,13 @@ def main():
   from PyQt6.QtWidgets import QMessageBox
   _single = QSharedMemory('Bookeeper-' + Config.APP_NAME)
   if not _single.create(1):
-    QMessageBox.warning(None, Config.APP_NAME, '程序已在运行中')
-    sys.exit(0)
+    # create 失败可能是上次异常退出残留的段：attach 后 detach 尝试清理，
+    # 若另一实例真在运行，attach+detach 不影响它，重试 create 仍会失败
+    if _single.error() == QSharedMemory.SharedMemoryError.AlreadyExists and _single.attach():
+      _single.detach()
+    if not _single.create(1):
+      QMessageBox.warning(None, Config.APP_NAME, '程序已在运行中')
+      sys.exit(0)
 
   from ui.theme import DARK_QSS
   app.setStyleSheet(DARK_QSS)
