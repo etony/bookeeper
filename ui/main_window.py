@@ -758,11 +758,12 @@ class MainWindow(QMainWindow):
       self._web_manager.start_server()
 
   def _on_web_started(self):
-    """Web 服务启动成功：更新按钮状态，状态栏显示地址"""
+    """Web 服务启动成功：更新按钮状态，自动打开浏览器"""
     url = f'http://127.0.0.1:{Config.WEB_PORT}'
     self._toolbar.set_web_running(True)
-    self.statusBar().showMessage(f'Web 服务已启动: {url}（在浏览器打开请访问此地址）')
-    # 不再强制打开浏览器——用户可能只想后台运行服务
+    self.statusBar().showMessage(f'Web 服务已启动: {url}')
+    import webbrowser
+    webbrowser.open(url)
 
   def _on_web_stopped(self):
     """Web 服务已停止"""
