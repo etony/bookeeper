@@ -7,7 +7,7 @@
 - **图书管理** — 增删改查，表格展示，单击填充表单，双击查看详情；支持 Ctrl+Z 撤销 / Ctrl+Y 重做
 - **封面墙** — 网格浏览封面（Ctrl+W），可排序、调每行数量，后台线程池下载封面
 - **豆瓣 API** — ISBN（10/13 位）自动获取书名/作者/封面/评分；关键词搜索图书一键入库
-- **排序筛选** — 点击表头排序（价格/评分/人数按数值排序），关键词 + 状态下拉筛选，列可拖拽重排、右键显隐
+- **排序筛选** — 点击表头排序（价格/评分/人数按数值排序），启动固定按最新在前（rowid）且不恢复上次排序（列宽/顺序/显隐仍持久化），关键词 + 状态下拉筛选，列可拖拽重排、右键显隐
 - **阅读追踪** — 三种状态（默认/计划/已读），书柜位置，购书/已读日期
 - **CSV 导入/导出** — UTF-8 BOM 编码，兼容旧版列名映射；导入在后台线程执行并显示进度
 - **统计面板** — 阅读状态饼图、出版社 TOP10、评分分布柱状图（matplotlib 深色风格）
@@ -68,7 +68,7 @@ BOOKEEPER_DATABASE_PATH=/path/to/books.db
 }
 ```
 
-> **注意**：`config.json` 使用 `douban_api_key`（下划线命名），旧版 `Config` 类使用 `DOUBAN_API_KEY`（大写+下划线）。推荐使用 `ConfigManager` 或 `get_config()` 访问配置。
+> **注意**：`config.json` 使用小写下划线 key（如 `douban_api_key`），同时兼容旧版大写 key（`DOUBAN_API_KEY`）。启动时 `init_config()` 会把最终配置回写 `Config` 静态类（`Config.DB_PATH` 等），运行时代码大多直接读这些静态类。
 
 ### 配置模块
 
@@ -137,12 +137,14 @@ BOOKEEPER_DATABASE_PATH=/path/to/books.db
 │       ├── stats.html      # 统计页面
 │       └── error.html      # 错误页面
 ├── tests/                  # 测试套件
-│   ├── conftest.py         # pytest fixtures
+│   ├── conftest.py         # pytest fixtures（测试库隔离）
+│   ├── fixtures/           # 测试数据（books.json、config.json）
 │   ├── unit/               # 单元测试
 │   └── integration/        # 集成测试
 ├── books.db                # SQLite 数据库（当前被 git 追踪；日常数据变更勿随手提交）
 ├── backups/                # 自动备份目录（已 gitignore）
 ├── covers/                 # 封面本地缓存（已 gitignore）
+├── AGENTS.md               # AI agent 工作约定
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -188,7 +190,7 @@ BOOKEEPER_DATABASE_PATH=/path/to/books.db
 │    BookWebServer (内嵌 uvicorn)      │
 │    templates/ (Jinja2 HTML 模板)     │
 │    路由: / /cover-wall /add /edit    │
-│    /delete /book /cover /stats       │
+│    /delete /sync /book /cover /stats   │
 ├──────────────────────────────────────┤
 │           Tests 层                   │
 │    unit/ (单元测试)                  │
@@ -202,14 +204,16 @@ MainWindow 作为中央协调者，通过 Qt 信号-槽连接各模块。网络�
 
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/ -v                    # 运行所有测试
-pytest tests/ -v -m unit           # 仅单元测试
-pytest tests/ -v -m integration    # 仅集成测试
+python -m pytest tests/ -q                    # 全部
+python -m pytest tests/unit/test_foo.py -q    # 单文件
 ```
 
-测试覆盖：配置系统、数据库操作、数据模型、撤销命令、UI 组件、Web 模板。
+测试覆盖：配置系统、数据库操作、数据模型、撤销命令、UI 组件、备份、Web 模板。
+测试在独立临时库上运行（`conftest.py` 隔离），不会触碰真实 `books.db`。
+
+> pytest.ini 虽定义了 `unit`/`integration`/`slow` markers，但测试未打标——`-m unit` 会 deselect 全部测试。
 
 ### 开发规范
 
 - 每次代码改动完成后按约定 `git add -A && git commit`（英文提交说明）
-- 开发依赖：pytest、black、flake8、mypy（见 `requirements-dev.txt`）
+- 实际使用的开发依赖只有 pytest；`requirements-dev.txt` 中的 black/flake8/mypy **未配置，勿直接跑**（black 默认 4 空格，与本项目 2 空格缩进冲突）
