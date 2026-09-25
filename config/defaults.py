@@ -1,6 +1,6 @@
 # 默认配置值
 from dataclasses import dataclass, field
-from typing import Optional, Dict
+from typing import Dict
 
 @dataclass
 class DoubanConfig:

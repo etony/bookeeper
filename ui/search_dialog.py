@@ -150,13 +150,24 @@ class SearchDialog(QDialog):
     self._set_loading(False)
     self._books = books
     if not books:
-      # 空结果：显示空状态提示
+      # 空结果：显示空状态提示，跨列显示
       model = QStandardItemModel(1, 9)
       model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])
       item = QStandardItem('未找到匹配的图书')
       item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
       model.setItem(0, 0, item)
-      self._table.setModel(model)
+      # 跨列显示：覆盖 span 方法
+      class _SpanModel(QStandardItemModel):
+        def span(self, row, column):
+          if row == 0 and column == 0:
+            return (1, 9)
+          return (1, 1)
+      span_model = _SpanModel()
+      span_model.setHorizontalHeaderLabels(model.horizontalHeaderLabels())
+      for r in range(model.rowCount()):
+        for c in range(model.columnCount()):
+          span_model.setItem(r, c, model.item(r, c))
+      self._table.setModel(span_model)
       return
     model = QStandardItemModel(len(books), 9)
     model.setHorizontalHeaderLabels(['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜'])

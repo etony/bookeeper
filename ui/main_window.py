@@ -530,14 +530,12 @@ class MainWindow(QMainWindow):
 
   def _batch_update_status(self, isbn_list: list, new_status: str):
     """批量修改图书状态"""
+    import copy
     for isbn in isbn_list:
       book = self._repo.get_by_isbn(isbn)
       if book:
-        new_book = Book(
-          isbn=book.isbn, title=book.title, author=book.author, publisher=book.publisher,
-          price=book.price, rating=book.rating, raters=book.raters, status=new_status,
-          shelf=book.shelf, start_date=book.start_date, end_date=book.end_date,
-        )
+        new_book = copy.copy(book)
+        new_book.status = new_status
         self._undo_manager.execute(UpdateBookCommand(self._repo, book, new_book))
     self._mark_dirty()
     self._load_data()
@@ -558,6 +556,8 @@ class MainWindow(QMainWindow):
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
     self._update_status()
+    # 重置搜索按钮文字
+    self._search_bar.reset_search_button()
 
   def _reset_search(self):
     """重置搜索条件，显示全部图书"""

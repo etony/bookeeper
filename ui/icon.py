@@ -14,7 +14,6 @@ import math
 import struct
 import tempfile
 import ctypes
-import ctypes.wintypes
 from PyQt6.QtCore import Qt, QRectF, QBuffer, QIODevice
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QIcon, QImage
 

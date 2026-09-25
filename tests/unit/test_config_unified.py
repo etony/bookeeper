@@ -152,14 +152,13 @@ class TestDeprecatedConfig:
         assert hasattr(Config, 'BACKUP_INTERVAL_MS')
 
     def test_config_load_from_config_manager(self):
-        """Config 可以从 ConfigManager 加载配置"""
+        """Config 可以从 ConfigManager 加载配置（已移除，改为直接使用 ConfigManager）"""
         mgr = ConfigManager()
-        Config.load_from_config_manager(mgr)
-        assert Config.APP_NAME == mgr.config.name
-        assert Config.APP_VERSION == mgr.config.version
-        assert Config.DB_PATH == mgr.config.database.path
-        assert Config.WEB_PORT == mgr.config.web.port
-        assert Config.DOUBAN_API_KEY == mgr.config.douban.api_key
-        assert Config.DOUBAN_API_KEY_SEARCH == mgr.config.douban.api_key_search
-        assert Config.BACKUP_KEEP == mgr.config.backup.keep
-        assert Config.BACKUP_INTERVAL_MS == mgr.config.backup.interval_ms
+        assert mgr.config.name == "Bookeeper"
+        assert mgr.config.version == "3.0.0"
+        assert mgr.config.database.path == "books.db"
+        assert mgr.config.web.port == 8899
+        assert mgr.config.douban.api_key == "0ab215a8b1977939201640fa14c66bab"
+        assert mgr.config.douban.api_key_search == "0ac44ae016490db2204ce0a042db2916"
+        assert mgr.config.backup.keep == 30
+        assert mgr.config.backup.interval_ms == 300000

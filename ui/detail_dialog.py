@@ -7,6 +7,7 @@
 └──────────────────────────────────────────┘
 """
 
+import copy
 import logging
 
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
@@ -181,16 +182,18 @@ class DetailDialog(QDialog):
     if not book:
       return
 
+    # 使用副本显示，避免污染缓存/数据库
+    display_book = copy.copy(book)
     # 更新推荐度（评分或人数可能有变化）
-    book.recommend = str(Book._calc_recommend(book.rating, book.raters))
+    display_book.recommend = str(Book._calc_recommend(display_book.rating, display_book.raters))
 
-    self.setWindowTitle(f'图书信息 - {book.title}')
+    self.setWindowTitle(f'图书信息 - {display_book.title}')
 
     # 重置封面显示
     self._cover.setPixmap(QPixmap())
-    if book.cover_url:
+    if display_book.cover_url:
       self._cover.setText('加载中...')
-      self._start_cover_download(book.cover_url, isbn, book.douban_url)
+      self._start_cover_download(display_book.cover_url, isbn, display_book.douban_url)
     else:
       self._cover.setText('无封面')
 
@@ -198,16 +201,16 @@ class DetailDialog(QDialog):
     pal = self.palette()
     muted = pal.color(QPalette.ColorRole.PlaceholderText).name()
     info_html = f'''<div style="padding: 8px;">
-<div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{book.title}</div>
+<div style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">{display_book.title}</div>
 <table style="line-height: 1.8;">
-<tr><td style="color:{muted}; padding-right:16px;">作者</td><td>{book.author}</td></tr>
-<tr><td style="color:{muted};">出版</td><td>{book.publisher}</td></tr>
-<tr><td style="color:{muted};">价格</td><td>{book.price}</td></tr>
-<tr><td style="color:{muted};">出版年</td><td>{book.pubdate}</td></tr>
-<tr><td style="color:{muted};">ISBN</td><td>{book.isbn}</td></tr>
-<tr><td style="color:{muted};">评分</td><td>{book.rating} 分 / {book.raters} 人</td></tr>
-<tr><td style="color:{muted};">推荐</td><td>{book.recommend}</td></tr>
-<tr><td style="color:{muted};">链接</td><td><a style="color:{ACCENT}; text-decoration:none;" href="{book.douban_url}">豆瓣详情 →</a></td></tr>
+<tr><td style="color:{muted}; padding-right:16px;">作者</td><td>{display_book.author}</td></tr>
+<tr><td style="color:{muted};">出版</td><td>{display_book.publisher}</td></tr>
+<tr><td style="color:{muted};">价格</td><td>{display_book.price}</td></tr>
+<tr><td style="color:{muted};">出版年</td><td>{display_book.pubdate}</td></tr>
+<tr><td style="color:{muted};">ISBN</td><td>{display_book.isbn}</td></tr>
+<tr><td style="color:{muted};">评分</td><td>{display_book.rating} 分 / {display_book.raters} 人</td></tr>
+<tr><td style="color:{muted};">推荐</td><td>{display_book.recommend}</td></tr>
+<tr><td style="color:{muted};">链接</td><td><a style="color:{ACCENT}; text-decoration:none;" href="{display_book.douban_url}">豆瓣详情 →</a></td></tr>
 </table></div>'''
     self._info.setHtml(info_html)
 

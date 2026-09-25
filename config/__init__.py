@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import warnings
 from typing import Dict, Any
 from .defaults import AppConfig, DEFAULT_CONFIG
 from .schema import DEFAULT_SCHEMA
@@ -28,9 +27,8 @@ class Config:
     # ── 豆瓣 API ──────────────────────────────────────────────
     DOUBAN_API_KEY = '0ab215a8b1977939201640fa14c66bab'
     DOUBAN_API_KEY_SEARCH = '0ac44ae016490db2204ce0a042db2916'
-    DOUBAN_BOOK_URL = 'https://api.douban.com/v2/book'
-    DOUBAN_ISBN_URL = f'{DOUBAN_BOOK_URL}/isbn'
-    DOUBAN_SEARCH_URL = f'{DOUBAN_BOOK_URL}/search'
+    DOUBAN_ISBN_URL = 'https://api.douban.com/v2/book/isbn'
+    DOUBAN_SEARCH_URL = 'https://api.douban.com/v2/book/search'
     HEADERS = {
         'Referer': 'https://m.douban.com/tv/american',
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
@@ -42,12 +40,7 @@ class Config:
     MAIN_WINDOW_SIZE = (1000, 800)
     SEARCH_DIALOG_SIZE = (700, 420)
     DETAIL_DIALOG_SIZE = (580, 500)
-    
-    # ── 封面墙配置 ──────────────────────────────────────────
-    COVER_WALL_COLUMNS = 5
-    COVER_CARD_WIDTH = 150
-    COVER_CARD_HEIGHT = 230
-    
+
     # ── 图书状态与书柜 ────────────────────────────────────────
     STATUSES = ['默认', '计划', '已读']
     DEFAULT_STATUS = '默认'
@@ -57,28 +50,6 @@ class Config:
     WEB_PORT = 8899
     BACKUP_KEEP = 30
     BACKUP_INTERVAL_MS = 300000
-    
-    @classmethod
-    def load_from_config_manager(cls, config_manager):
-        """从 ConfigManager 加载配置，覆盖默认值（已废弃，请直接使用 ConfigManager）"""
-        warnings.warn(
-            "Config.load_from_config_manager 已废弃，请直接使用 ConfigManager",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        config = config_manager.config
-        cls.APP_NAME = config.name
-        cls.APP_VERSION = config.version
-        cls.DB_PATH = config.database.path
-        cls.DOUBAN_API_KEY = config.douban.api_key
-        cls.DOUBAN_API_KEY_SEARCH = config.douban.api_key_search
-        cls.DOUBAN_BOOK_URL = config.douban.book_url
-        cls.DOUBAN_ISBN_URL = f'{config.douban.book_url}/isbn'
-        cls.DOUBAN_SEARCH_URL = f'{config.douban.book_url}/search'
-        cls.HEADERS = config.douban.headers
-        cls.WEB_PORT = config.web.port
-        cls.BACKUP_KEEP = config.backup.keep
-        cls.BACKUP_INTERVAL_MS = config.backup.interval_ms
 
 class ConfigManager:
     def __init__(self, config_path: str = None):
@@ -134,33 +105,31 @@ class ConfigManager:
         }
     
     def _dict_to_config(self, data: Dict[str, Any]) -> AppConfig:
+        """从字典构建 AppConfig，未提供的字段使用 DEFAULT_CONFIG 的值"""
         from .defaults import DoubanConfig, DatabaseConfig, WebConfig, BackupConfig
-        
-        headers = data.get("douban_headers", {
-            "Referer": "https://m.douban.com/tv/american",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
-                          "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-        })
-        
+        d = DEFAULT_CONFIG
+
+        headers = data.get("douban_headers", d.douban.headers)
+
         return AppConfig(
-            name=data.get("name", "Bookeeper"),
-            version=data.get("version", "3.0.0"),
+            name=data.get("name", d.name),
+            version=data.get("version", d.version),
             douban=DoubanConfig(
-                api_key=data.get("douban_api_key", "0ab215a8b1977939201640fa14c66bab"),
-                api_key_search=data.get("douban_api_key_search", "0ac44ae016490db2204ce0a042db2916"),
-                book_url=data.get("douban_book_url", "https://api.douban.com/v2/book"),
+                api_key=data.get("douban_api_key", d.douban.api_key),
+                api_key_search=data.get("douban_api_key_search", d.douban.api_key_search),
+                book_url=data.get("douban_book_url", d.douban.book_url),
                 headers=headers,
             ),
             database=DatabaseConfig(
-                path=data.get("database_path", "books.db"),
+                path=data.get("database_path", d.database.path),
             ),
             web=WebConfig(
-                port=data.get("web_port", 8899),
-                host=data.get("web_host", "127.0.0.1"),
+                port=data.get("web_port", d.web.port),
+                host=data.get("web_host", d.web.host),
             ),
             backup=BackupConfig(
-                keep=data.get("backup_keep", 30),
-                interval_ms=data.get("backup_interval_ms", 300000),
+                keep=data.get("backup_keep", d.backup.keep),
+                interval_ms=data.get("backup_interval_ms", d.backup.interval_ms),
             ),
         )
     

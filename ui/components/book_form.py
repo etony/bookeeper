@@ -131,10 +131,6 @@ class BookFormWidget(QGroupBox):
       'end_date': self._get_date(self._end_date),
     }
 
-  def set_form_data(self, row_data: list):
-    """用行列表数据填充表单（与 TABLE_COLUMNS 对应）"""
-    self.fill_from_row(row_data)
-
   def get_row_data(self) -> list:
     """从表单读取数据，返回行列表（与 TABLE_COLUMNS 对应）"""
     d = self.get_form_data()
@@ -194,10 +190,6 @@ class BookFormWidget(QGroupBox):
     self._end_date.setDate(QDate(1900, 1, 1))
     self._isbn_input.setFocus()
 
-  def focus_title(self):
-    """聚焦到书名输入框"""
-    self._title_input.setFocus()
-
   # ══════════════════════════════════════════════
   #  内部槽
   # ══════════════════════════════════════════════
@@ -209,20 +201,9 @@ class BookFormWidget(QGroupBox):
       self.fetch_requested.emit(isbn)
 
   def _on_new_clear_clicked(self):
-    """新增/清空按钮被点击：根据表单状态决定行为"""
-    # 检查表单是否有内容
-    has_content = bool(self._isbn_input.text().strip() or 
-                      self._title_input.text().strip() or
-                      self._author_input.text().strip())
-    
-    if has_content:
-      # 有内容时清空表单
-      self.clear_form()
-      self._isbn_input.setFocus()
-    else:
-      # 无内容时聚焦书名（准备手动输入）
-      self.clear_form()
-      self._title_input.setFocus()
+    """新增/清空按钮：清空表单并聚焦 ISBN"""
+    self.clear_form()
+    self._isbn_input.setFocus()
 
   def _on_status_changed(self, text: str):
     """状态设为'已读'时自动填入日期，切回非'已读'时重置"""

@@ -8,9 +8,8 @@
 """
 
 import os
-import threading
-from queue import Queue
-from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import List
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QImage, QFont, QColor, QPainter, QPen, QAction
@@ -36,35 +35,28 @@ def _is_dark_theme() -> bool:
 
 
 class CoverDownloadPool:
-    """封面下载线程池，限制并发数量"""
+    """封面下载线程池，基于 ThreadPoolExecutor"""
 
     def __init__(self, max_workers=3):
-        self._queue = Queue()
-        self._workers = []
-        self._lock = threading.Lock()
-
-        for _ in range(max_workers):
-            worker = threading.Thread(target=self._worker_loop, daemon=True)
-            worker.start()
-            self._workers.append(worker)
-
-    def _worker_loop(self):
-        while True:
-            isbn, cover_url, callback = self._queue.get()
-            try:
-                from services.covers import get_cover
-                data, _ = get_cover(isbn, cover_url)
-                if callback:
-                    callback(isbn, data)
-            except Exception:
-                if callback:
-                    callback(isbn, None)
-            finally:
-                self._queue.task_done()
+        self._pool = ThreadPoolExecutor(max_workers=max_workers)
 
     def submit(self, isbn: str, cover_url: str, callback=None):
         """提交下载任务"""
-        self._queue.put((isbn, cover_url, callback))
+        def _do_download():
+            try:
+                from services.covers import get_cover
+                data, _ = get_cover(isbn, cover_url)
+                return isbn, data
+            except Exception:
+                return isbn, None
+
+        def _on_done(future):
+            isbn, data = future.result()
+            if callback:
+                callback(isbn, data)
+
+        future = self._pool.submit(_do_download)
+        future.add_done_callback(_on_done)
 
 
 # 全局线程池实例
@@ -249,10 +241,6 @@ class CoverCard(QFrame):
         """右键菜单事件"""
         self.context_menu.emit(self._book.isbn, event.globalPos())
 
-    def get_book(self) -> Book:
-        """获取卡片对应的图书对象"""
-        return self._book
-
 
 class CoverWallWidget(QWidget):
     """
@@ -327,13 +315,6 @@ class CoverWallWidget(QWidget):
         """设置要显示的图书列表"""
         self._books = books
         self._refresh_grid()
-
-    def get_selected_isbn(self) -> Optional[str]:
-        """获取当前选中的图书 ISBN"""
-        focused = self._grid_widget.focusWidget()
-        if isinstance(focused, CoverCard):
-            return focused._book.isbn
-        return None
 
     def _refresh_grid(self):
         """刷新封面网格"""

@@ -286,6 +286,11 @@ class BookRepo:
         isbn = str(row.get('ISBN', ''))
         if not isbn:
           continue
+        # 先读取已有记录，保留扩展字段不被覆盖
+        existing = conn.execute(
+          'SELECT cover_url, pubdate, douban_url, recommend, pages FROM books WHERE isbn=?',
+          (isbn,)
+        ).fetchone()
         data = {
           'isbn': isbn,
           'title': str(row.get('书名', '')),
@@ -299,6 +304,12 @@ class BookRepo:
           'start_date': str(row.get('购书日期', '')),
           'end_date': str(row.get('已读日期', '')),
         }
+        if existing:
+          data['cover_url'] = existing[0] or ''
+          data['pubdate'] = existing[1] or ''
+          data['douban_url'] = existing[2] or ''
+          data['recommend'] = existing[3] or '0'
+          data['pages'] = existing[4] or ''
         cols = ', '.join(data.keys())
         placeholders = ', '.join('?' for _ in data)
         updates = ', '.join(f'{k}=excluded.{k}' for k in data)

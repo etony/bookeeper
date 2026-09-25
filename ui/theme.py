@@ -2,6 +2,12 @@
 ACCENT = '#e8922a'  # 强调色，所有组件共用
 DIALOG_MARGINS = (12, 12, 12, 12)  # 对话框统一边距
 DIALOG_SPACING = 8  # 对话框统一间距
+
+# 主题配色（统计面板等共用）
+DARK_BG = '#1c1c1f'
+DARK_FG = '#e0e0e4'
+LIGHT_BG = '#f8f6f2'
+LIGHT_FG = '#2c3e50'
 BASE = '''
 QWidget { font-size: 13px; }
 QLineEdit, QComboBox, QTextBrowser {
