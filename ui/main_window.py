@@ -59,6 +59,9 @@ class MainWindow(QMainWindow):
     self._undo_manager = UndoManager()
     self._dirty = False
     self._dark_mode = True
+    # 是否已应用过排序（用户点击表头或恢复了上次排序）；
+    # _load_data 全量重载后按此标记重新应用排序，保持箭头与数据一致
+    self._user_sorted = False
     self._setup_ui()
     self._init_table()
     self._connect_signals()
@@ -188,6 +191,13 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
+    # load_dataframe 把顺序重置为 rowid DESC，若已应用过排序则重新排一次，
+    # 否则表头箭头与数据顺序会不一致
+    if self._user_sorted:
+      hdr = self._table.horizontalHeader()
+      section = hdr.sortIndicatorSection()
+      if 0 <= section < len(cols):
+        self._model.sort(section, hdr.sortIndicatorOrder())
     # 同时更新封面墙数据
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
@@ -867,6 +877,14 @@ class MainWindow(QMainWindow):
   def _restore_header_state(self):
     """从 settings.ini 恢复表头状态"""
     hdr = self._table.horizontalHeader()
+    # 排序信号必须在 restoreState 之前连接：restoreState 会触发
+    # sortIndicatorChanged（即使值未变），据此标记 _user_sorted；
+    # 保存动作经 500ms 防抖，实际写入发生在 restore 完成之后
+    try:
+      hdr.sortIndicatorChanged.disconnect(self._on_sort_indicator_changed)
+    except TypeError:
+      pass
+    hdr.sortIndicatorChanged.connect(self._on_sort_indicator_changed)
     s = self._settings()
     state_b64 = s.value('headerState', '')
     if state_b64:
@@ -885,6 +903,11 @@ class MainWindow(QMainWindow):
       pass
     hdr.sectionMoved.connect(self._save_header_state)
     hdr.sectionResized.connect(self._save_header_state)
+
+  def _on_sort_indicator_changed(self, *_args):
+    """表头排序变化（用户点击或启动恢复）：标记已排序并保存状态"""
+    self._user_sorted = True
+    self._save_header_state()
 
   def _update_status(self):
     """更新状态栏：显示记录总数、Web状态和版本"""
