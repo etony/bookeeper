@@ -56,5 +56,5 @@ python -m pytest tests/unit/test_foo.py -q        # 单文件
 
 ## Workflow
 
-- 每次代码改动完成后 `git add -A && git commit`，提交信息用英文简述
+- 每次代码改动完成后 `git add -A && git commit`，提交信息用英文简述，并运行 `git push`，将代码提交到github 
 - 无 `opencode.json` / pre-commit；不要假设存在 format/lint 命令
