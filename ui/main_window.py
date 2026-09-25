@@ -875,16 +875,8 @@ class MainWindow(QMainWindow):
     s.setValue('headerState', base64.b64encode(state).decode('ascii'))
 
   def _restore_header_state(self):
-    """从 settings.ini 恢复表头状态"""
+    """从 settings.ini 恢复表头状态（列宽/列顺序/可见性，不恢复排序）"""
     hdr = self._table.horizontalHeader()
-    # 排序信号必须在 restoreState 之前连接：restoreState 会触发
-    # sortIndicatorChanged（即使值未变），据此标记 _user_sorted；
-    # 保存动作经 500ms 防抖，实际写入发生在 restore 完成之后
-    try:
-      hdr.sortIndicatorChanged.disconnect(self._on_sort_indicator_changed)
-    except TypeError:
-      pass
-    hdr.sortIndicatorChanged.connect(self._on_sort_indicator_changed)
     s = self._settings()
     state_b64 = s.value('headerState', '')
     if state_b64:
@@ -892,6 +884,18 @@ class MainWindow(QMainWindow):
         hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
       except Exception:
         pass
+      # 启动固定按 rowid DESC（最新在前）：restoreState 内部会触发一次
+      # 按存储指示器的排序，这里清除指示器并重新装载数据抵消掉
+      hdr.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+      self._user_sorted = False
+      self._load_data()
+    # 排序信号在恢复完成后才连接——启动恢复过程不标记 _user_sorted；
+    # 之后用户点击表头才会标记并保存（保存经 500ms 防抖）
+    try:
+      hdr.sortIndicatorChanged.disconnect(self._on_sort_indicator_changed)
+    except TypeError:
+      pass
+    hdr.sortIndicatorChanged.connect(self._on_sort_indicator_changed)
     # 断开旧的信号连接以防重复绑定
     try:
       hdr.sectionMoved.disconnect()

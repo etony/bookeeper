@@ -82,7 +82,10 @@ class BookTableModel(QAbstractTableModel):
 
     数值列（价格/评分/人数）先转 float 再排，
     避免字符串序把 "10" 排在 "8" 前面；无法解析的值排末尾。
+    越界列（如清除指示器时 Qt 传入的 -1）直接忽略。
     """
+    if not (0 <= column < len(self._data.columns)):
+      return
     self.beginResetModel()
     col_name = str(self._data.columns[column])
     ascending = order == Qt.SortOrder.AscendingOrder
