@@ -8,6 +8,10 @@ def clean_db(client):
     """每个测试前清空数据库，确保隔离"""
     from services import get_repo
     repo = get_repo()
+    # 防线：确认连的是 conftest 创建的临时库，绝不能清空真实 books.db
+    assert 'bookeeper_test' in repo._path, (
+        f'测试数据库路径异常: {repo._path}（conftest 的 DB_PATH 隔离补丁失效）'
+    )
     with repo._conn() as conn:
         conn.execute('DELETE FROM books')
     yield
