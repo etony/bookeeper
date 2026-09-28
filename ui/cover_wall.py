@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QPixmap, QImage, QFont, QColor, QPainter, QPen, QAction
+from PyQt6.QtGui import QImage, QFont, QColor, QPainter, QPen, QAction
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QScrollArea, QFrame, QMenu, QComboBox, QSizePolicy,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from config import Config
 from core.models.book import Book
+from ui.components.cover_label import CoverLabel
 from ui.theme import ACCENT, DARK_BG, DARK_FG, LIGHT_BG, LIGHT_FG
 
 
@@ -127,8 +128,8 @@ class CoverCard(QFrame):
         else:
             self._rating_label.hide()
 
-        # 封面图片（可伸缩）
-        self._cover_label = QLabel('加载中...')
+        # 封面图片（可伸缩；CoverLabel 保存原图并随尺寸等比重缩放）
+        self._cover_label = CoverLabel('加载中...')
         self._cover_label.setMinimumSize(100, 140)
         self._cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         dark = _is_dark_theme()
@@ -220,7 +221,7 @@ class CoverCard(QFrame):
         self._set_cover_from_data(data)
 
     def _set_cover_from_data(self, data: bytes):
-        """从图片数据设置封面（按标签当前尺寸缩放）"""
+        """从图片数据设置封面（原图交给 CoverLabel，随标签尺寸等比缩放）"""
         if not data:
             self._cover_label.setText('加载失败')
             return
@@ -228,12 +229,7 @@ class CoverCard(QFrame):
         if img.isNull():
             self._cover_label.setText('加载失败')
             return
-        pixmap = QPixmap.fromImage(img)
-        label_size = self._cover_label.size()
-        scaled = pixmap.scaled(label_size.width() - 4, label_size.height() - 4,
-                              Qt.AspectRatioMode.KeepAspectRatio,
-                              Qt.TransformationMode.SmoothTransformation)
-        self._cover_label.setPixmap(scaled)
+        self._cover_label.set_image(img)
 
     def enterEvent(self, event):
         """鼠标进入事件"""

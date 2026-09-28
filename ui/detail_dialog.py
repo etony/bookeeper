@@ -10,11 +10,12 @@
 import copy
 import logging
 
-from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPalette, QShortcut, QKeySequence
+from PyQt6.QtCore import Qt, QThread, QObject, QSize, pyqtSignal
+from PyQt6.QtGui import QImage, QPalette, QShortcut, QKeySequence
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser, QPushButton
 
 from config import Config
+from ui.components.cover_label import CoverLabel
 from ui.theme import ACCENT, DIALOG_MARGINS, DIALOG_SPACING
 
 LOG = logging.getLogger(__name__)
@@ -126,11 +127,10 @@ class DetailDialog(QDialog):
     content = QHBoxLayout()
     content.setSpacing(DIALOG_SPACING)
 
-    # 左侧：封面（最小尺寸 + 可缩放）
-    self._cover = QLabel('无封面')
+    # 左侧：封面（最小尺寸 + 可缩放；CoverLabel 等比缩放不变形）
+    self._cover = CoverLabel('无封面', size_hint=QSize(200, 280))
     self._cover.setMinimumSize(160, 224)
     self._cover.setMaximumSize(280, 392)
-    self._cover.setScaledContents(True)
     self._cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
     self._cover.setStyleSheet(
       'border: 1px solid; border-radius: 4px; font-size: 13px;')
@@ -200,7 +200,7 @@ class DetailDialog(QDialog):
     self.setWindowTitle(f'图书信息 - {display_book.title}')
 
     # 重置封面显示
-    self._cover.setPixmap(QPixmap())
+    self._cover.clear_image()
     if display_book.cover_url:
       self._cover.setText('加载中...')
       self._start_cover_download(display_book.cover_url, isbn, display_book.douban_url)
@@ -256,7 +256,7 @@ class DetailDialog(QDialog):
     if isbn != self._isbn_list[self._index % len(self._isbn_list)]:
       return
     img = QImage.fromData(data)
-    self._cover.setPixmap(QPixmap.fromImage(img))
+    self._cover.set_image(img if not img.isNull() else None)
 
   def _evict_cache(self):
     """
