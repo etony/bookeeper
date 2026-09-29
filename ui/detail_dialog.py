@@ -27,6 +27,29 @@ from services.douban import DoubanService
 # 避免频繁翻页时反复从数据库加载
 _MAX_CACHE = 50
 
+# 已退役但可能仍在运行的封面下载线程 (thread, worker)。
+# 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃。
+# 线程自然结束后由下一次 _prune_retired_threads() 释放。
+_retired_threads = []
+
+
+def _retire_cover_thread(thread, worker):
+  """退役一个封面下载线程：引用交给看护列表，并顺带清理已结束的"""
+  _retired_threads.append((thread, worker))
+  _prune_retired_threads()
+
+
+def _prune_retired_threads():
+  alive = []
+  for thread, worker in _retired_threads:
+    try:
+      running = thread.isRunning()
+    except RuntimeError:
+      running = False          # C++ 对象已被销毁
+    if running:
+      alive.append((thread, worker))
+  _retired_threads[:] = alive
+
 
 class _CoverWorker(QObject):
   """
@@ -39,6 +62,7 @@ class _CoverWorker(QObject):
   """
 
   cover_ready = pyqtSignal(str, bytes)   # (isbn, image_data)
+  done = pyqtSignal()                    # 下载结束（成功/失败/异常都会发）
 
   def __init__(self, url: str, isbn: str, referer: str = None):
     super().__init__()
@@ -55,6 +79,8 @@ class _CoverWorker(QObject):
         self.cover_ready.emit(self._isbn, data)
     except Exception as e:
       LOG.warning('封面下载失败: %s', e)
+    finally:
+      self.done.emit()
 
 
 class DetailDialog(QDialog):
@@ -79,6 +105,8 @@ class DetailDialog(QDialog):
     self._cache = {}                      # isbn → Book 对象的缓存字典
     self._cache_order = []                # 维护缓存访问顺序（用于 LRU 淘汰）
     self._build_ui()
+    # accept()/reject() 不经过 closeEvent，也要退役下载线程
+    self.finished.connect(self._retire_cover_download)
     self._load_current()
 
   def _build_ui(self):
@@ -230,21 +258,37 @@ class DetailDialog(QDialog):
 
     使用 QThread + 工作对象模式，
     避免线程操作界面控件。
-    """
-    # 先停止旧线程，防止快速翻页时泄漏
-    if hasattr(self, '_cover_thread') and self._cover_thread and self._cover_thread.isRunning():
-      self._cover_thread.quit()
-      self._cover_thread.wait(1000)
 
-    self._cover_thread = QThread()
-    self._cover_worker = _CoverWorker(url, isbn, referer)
-    self._cover_worker.moveToThread(self._cover_thread)
-    self._cover_thread.started.connect(self._cover_worker.run)
-    self._cover_worker.cover_ready.connect(self._on_cover_ready)
-    self._cover_worker.cover_ready.connect(self._cover_thread.quit)
-    self._cover_worker.cover_ready.connect(self._cover_worker.deleteLater)
-    self._cover_thread.finished.connect(self._cover_thread.deleteLater)
-    self._cover_thread.start()
+    旧线程不做同步 wait（快速翻页时会卡 UI），直接退役：
+    引用交给模块级看护列表，下载完（done → quit）后自然结束。
+    注意不能用 finished → deleteLater 销毁线程对象——Python 还持有
+    引用，下次翻页访问 isRunning() 会抛 RuntimeError 导致崩溃。
+    """
+    self._retire_cover_download()
+
+    thread = QThread()
+    worker = _CoverWorker(url, isbn, referer)
+    worker.moveToThread(thread)
+    thread.started.connect(worker.run)
+    worker.cover_ready.connect(self._on_cover_ready)
+    worker.done.connect(thread.quit)      # 失败/空结果也要退出线程
+    self._cover_thread = thread
+    self._cover_worker = worker
+    thread.start()
+
+  def _retire_cover_download(self):
+    """把当前封面下载线程退役（交给看护列表或直接丢弃已结束的）"""
+    thread = getattr(self, '_cover_thread', None)
+    worker = getattr(self, '_cover_worker', None)
+    self._cover_thread = None
+    self._cover_worker = None
+    if thread is not None:
+      _retire_cover_thread(thread, worker)
+
+  def closeEvent(self, a0):
+    """关闭前退役下载线程，避免线程对象随对话框一起被 GC 销毁"""
+    self._retire_cover_download()
+    super().closeEvent(a0)
 
   def _on_cover_ready(self, isbn: str, data: bytes):
     """
