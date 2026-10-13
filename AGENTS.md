@@ -43,6 +43,7 @@ python -m pytest tests/unit/test_foo.py -q        # 单文件
 - **启动排序**：固定 rowid DESC，**不恢复** headerState 里的排序（`_restore_header_state` 里 `setSortIndicator(-1)` + 重载抵消 `restoreState` 内部触发的排序）；列顺序/宽度/可见性仍恢复。排序信号槽必须在 `restoreState` **之后**连接，否则启动就被标记成已排序。`BookTableModel.sort` 对越界列直接 return（Qt 清指示器传 -1）
 - **撤销**：已存在的书入库走 `UpdateBookCommand`，仅新书用 `AddBookCommand`（否则 Ctrl+Z 会整条删掉）
 - **封面墙**：工作线程回调必须 `pyqtSignal` 回主线程，勿在非 Qt 线程 `QTimer.singleShot`
+- **QThread 生命周期（`ui/detail_dialog.py`）**：勿把 `finished → deleteLater`，会销毁 C++ 线程而 Python 包装器仍存活，下次翻页 `isRunning()` 崩溃（`RuntimeError: QThread has been deleted`）。用 `_retire_cover_thread` 把 (thread, worker) 挪进模块级 `_retired_threads` 保活、跑完后清理——GC 一个运行中的 QThread 会 abort。worker 在 `finally` emit `done → thread.quit`，保证失败/空结果也退出线程
 - 导出 CSV 列比界面多（封面 URL、豆瓣链接等）；导入走后台线程 + 进度条
 - 主题暖深色默认，强调色 `#e8922a`（`ui/theme.py` 与 Web CSS 各有一份）
 - 单实例：`QSharedMemory`，重复启动弹窗退出；create 失败先 attach+detach 清残留段再重试
