@@ -31,6 +31,30 @@ from services.undo import UndoManager, AddBookCommand, DeleteBookCommand, Update
 from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
 
+# 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
+# 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
+# 也不能 finished → deleteLater——C++ 对象销毁后包装器仍存活，
+# 下次 _do_fetch_book 调 isRunning() 会抛 RuntimeError。
+_retired_threads = []
+
+
+def _retire_fetch_thread(thread, worker):
+  """退役一个查询线程：引用交给看护列表，并顺带清理已结束的"""
+  _retired_threads.append((thread, worker))
+  _prune_retired_threads()
+
+
+def _prune_retired_threads():
+  alive = []
+  for thread, worker in _retired_threads:
+    try:
+      running = thread.isRunning()
+    except RuntimeError:
+      running = False          # C++ 对象已被销毁
+    if running:
+      alive.append((thread, worker))
+  _retired_threads[:] = alive
+
 
 class MainWindow(QMainWindow):
   """
@@ -351,6 +375,13 @@ class MainWindow(QMainWindow):
 
   def closeEvent(self, event):
     """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 备份"""
+    # 查询线程若仍在运行，交给看护列表保活，避免随窗口被 GC 销毁导致 abort
+    thread = getattr(self, '_fetch_thread', None)
+    worker = getattr(self, '_fetch_worker', None)
+    self._fetch_thread = None
+    self._fetch_worker = None
+    if thread is not None:
+      _retire_fetch_thread(thread, worker)
     self._web_manager.cleanup()
     s = self._settings()
     geo = self.saveGeometry().data()
@@ -395,20 +426,24 @@ class MainWindow(QMainWindow):
 
   def _do_fetch_book(self, isbn: str):
     """实际执行豆瓣查询（异步）"""
-    # 先停止旧线程，防止快速重复调用时泄漏
-    if hasattr(self, '_fetch_thread') and self._fetch_thread and self._fetch_thread.isRunning():
-      self._fetch_thread.quit()
-      self._fetch_thread.wait(1000)
+    # 先退役旧线程，防止快速重复调用时泄漏。
+    # 注意：不能 quit/wait 旧线程（豆瓣请求阻塞中 quit 无效，wait 会卡 UI），
+    # 也不能 finished → deleteLater——见文件顶部 _retired_threads 注释
+    old_thread = getattr(self, '_fetch_thread', None)
+    old_worker = getattr(self, '_fetch_worker', None)
+    self._fetch_thread = None
+    self._fetch_worker = None
+    if old_thread is not None:
+      _retire_fetch_thread(old_thread, old_worker)
 
     # 创建 worker 和线程
     self._fetch_worker = _FetchBookWorker(self._api, isbn)
     self._fetch_thread = QThread()
     self._fetch_worker.moveToThread(self._fetch_thread)
 
-    # 连接信号
+    # 连接信号（线程退出后不 deleteLater，交由看护列表回收）
     self._fetch_worker.finished.connect(self._on_fetch_success)
     self._fetch_worker.failed.connect(self._on_fetch_error)
-    self._fetch_thread.finished.connect(self._fetch_thread.deleteLater)
 
     # 启动查询
     self._fetch_thread.started.connect(self._fetch_worker.run)
