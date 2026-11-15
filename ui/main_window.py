@@ -25,7 +25,6 @@ from config import Config
 from core.models.book import Book
 from services import get_repo
 from services.douban import DoubanService
-from services.backup import BackupService
 from services.undo import (UndoManager, AddBookCommand, DeleteBookCommand,
                            UpdateBookCommand, BatchDeleteCommand,
                            BatchUpdateCommand)
@@ -35,6 +34,7 @@ from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
 from ui.thread_utils import RETIRED as _retired_threads, retire
 from ui.workers import FetchBookWorker as _FetchBookWorker
+from ui.backup_controller import BackupController
 
 # 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
@@ -66,9 +66,10 @@ class MainWindow(QMainWindow):
     super().__init__()
     self._repo = get_repo()
     self._api = DoubanService()
-    self._backup_svc = BackupService()
     self._undo_manager = UndoManager()
-    self._dirty = False
+    self._backup_ctl = BackupController(parent=self)
+    self._backup_ctl.failed.connect(
+      lambda msg: self.statusBar().showMessage(msg, 15000))
     self._dark_mode = True
     # 是否已应用过排序（用户点击表头或恢复了上次排序）；
     # _load_data 全量重载后按此标记重新应用排序，保持箭头与数据一致
@@ -366,36 +367,34 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _setup_backup_timer(self):
-    """设置定时备份（默认每 5 分钟）"""
-    self._backup_timer = QTimer(self)
-    self._backup_timer.timeout.connect(self._do_backup)
-    self._backup_timer.start(Config.BACKUP_INTERVAL_MS)
+    """设置定时备份（默认每 5 分钟，实现见 ui/backup_controller.py）"""
+    self._backup_ctl.start()
+
+  @property
+  def _dirty(self) -> bool:
+    """数据是否有未备份的变更（委托给 BackupController）"""
+    return self._backup_ctl.dirty
+
+  @_dirty.setter
+  def _dirty(self, value: bool):
+    self._backup_ctl.dirty = value
+
+  @property
+  def _backup_svc(self):
+    """备份服务（委托给 BackupController，恢复备份时直接用）"""
+    return self._backup_ctl.service
 
   def _mark_dirty(self):
     """标记数据已变更，下次定时器触发时执行备份"""
-    self._dirty = True
+    self._backup_ctl.mark_dirty()
 
   def _do_backup(self):
-    """执行定时备份：数据无变更则跳过（backup 内部还有 mtime 去重）"""
-    if not self._dirty:
-      return
-    # 推迟到下一轮事件循环执行，避免在定时器回调里做 IO
-    QTimer.singleShot(0, self._run_backup)
+    """执行定时备份：数据无变更则跳过"""
+    self._backup_ctl.request_backup()
 
   def _run_backup(self):
-    """
-    实际执行备份。
-
-    只有成功才清 dirty 标记：失败时保留标记，下一轮定时器会重试，
-    同时提示用户——不能只写日志，否则数据可能永远没有备份。
-    """
-    self._backup_svc.backup()
-    if self._backup_svc.last_error:
-      self.statusBar().showMessage(
-        f'自动备份失败：{self._backup_svc.last_error}（数据未备份，稍后自动重试）',
-        15000)
-      return
-    self._dirty = False
+    """实际执行备份（失败保留 dirty 并提示，见 BackupController）"""
+    return self._backup_ctl.run_backup()
 
   def closeEvent(self, event):
     """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 备份"""
@@ -413,7 +412,7 @@ class MainWindow(QMainWindow):
       s.setValue('windowGeometry', base64.b64encode(geo).decode('ascii'))
     # 无条件备份：backup 内部按 mtime 去重，不会产生冗余文件；
     # 不能以 rowCount 为条件——搜索过滤为 0 行时也会有真实数据
-    self._backup_svc.backup()
+    self._backup_ctl.backup_now()
     super().closeEvent(event)
 
   # ══════════════════════════════════════════════
