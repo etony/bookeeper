@@ -12,7 +12,7 @@ import os
 import base64
 
 import pandas as pd
-from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QObject, QDate, QByteArray, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QDate, QByteArray
 from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout,
@@ -34,6 +34,7 @@ from utils import clean_isbn
 from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
 from ui.thread_utils import RETIRED as _retired_threads, retire
+from ui.workers import FetchBookWorker as _FetchBookWorker, ImportWorker as _ImportWorker
 
 # 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
@@ -1013,59 +1014,3 @@ class MainWindow(QMainWindow):
       book.start_date = existing.start_date
       book.end_date = existing.end_date
 
-
-class _FetchBookWorker(QObject):
-  """
-  后台查询豆瓣图书的工作线程。
-
-  在独立线程中执行 ISBN 查询，避免 UI 卡死。
-  """
-
-  finished = pyqtSignal(object)   # 查询成功，传回 Book 对象
-  failed = pyqtSignal(str)        # 查询失败，传回错误消息
-
-  def __init__(self, api, isbn):
-    super().__init__()
-    self._api = api
-    self._isbn = isbn
-
-  def run(self):
-    try:
-      book = self._api.get_book_by_isbn(self._isbn)
-      if book:
-        self.finished.emit(book)
-      else:
-        self.failed.emit(f'未找到图书: {self._isbn}')
-    except Exception as e:
-      self.failed.emit(str(e))
-    finally:
-      # 退出线程事件循环，确保线程正常结束
-      QThread.currentThread().quit()
-
-
-class _ImportWorker(QObject):
-  """
-  后台导入 CSV 的工作线程。
-
-  在独立线程中执行 import_df，通过信号汇报进度和结果，
-  避免大文件导入时 UI 卡死。
-  """
-
-  progress = pyqtSignal(int, int)    # (current, total)
-  finished = pyqtSignal(int)         # 导入成功的条数
-  failed = pyqtSignal(str)           # 错误消息
-
-  def __init__(self, repo, df):
-    super().__init__()
-    self._repo = repo
-    self._df = df
-
-  def run(self):
-    try:
-      count = self._repo.import_df(self._df, progress_callback=self._on_progress)
-      self.finished.emit(count)
-    except Exception as e:
-      self.failed.emit(str(e))
-
-  def _on_progress(self, current, total):
-    self.progress.emit(current, total)
