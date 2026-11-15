@@ -33,30 +33,13 @@ from utils import clean_isbn
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
+from ui.thread_utils import RETIRED as _retired_threads, retire
 
 # 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
 # 也不能 finished → deleteLater——C++ 对象销毁后包装器仍存活，
 # 下次 _do_fetch_book 调 isRunning() 会抛 RuntimeError。
-_retired_threads = []
-
-
-def _retire_fetch_thread(thread, worker):
-  """退役一个查询线程：引用交给看护列表，并顺带清理已结束的"""
-  _retired_threads.append((thread, worker))
-  _prune_retired_threads()
-
-
-def _prune_retired_threads():
-  alive = []
-  for thread, worker in _retired_threads:
-    try:
-      running = thread.isRunning()
-    except RuntimeError:
-      running = False          # C++ 对象已被销毁
-    if running:
-      alive.append((thread, worker))
-  _retired_threads[:] = alive
+# 看护列表与实现见 ui/thread_utils.py。
 
 
 class MainWindow(QMainWindow):
@@ -414,7 +397,7 @@ class MainWindow(QMainWindow):
     self._fetch_thread = None
     self._fetch_worker = None
     if thread is not None:
-      _retire_fetch_thread(thread, worker)
+      retire(thread, worker)
     self._web_manager.cleanup()
     s = self._settings()
     geo = self.saveGeometry().data()
@@ -461,13 +444,13 @@ class MainWindow(QMainWindow):
     """实际执行豆瓣查询（异步）"""
     # 先退役旧线程，防止快速重复调用时泄漏。
     # 注意：不能 quit/wait 旧线程（豆瓣请求阻塞中 quit 无效，wait 会卡 UI），
-    # 也不能 finished → deleteLater——见文件顶部 _retired_threads 注释
+    # 也不能 finished → deleteLater——见 ui/thread_utils.py 注释
     old_thread = getattr(self, '_fetch_thread', None)
     old_worker = getattr(self, '_fetch_worker', None)
     self._fetch_thread = None
     self._fetch_worker = None
     if old_thread is not None:
-      _retire_fetch_thread(old_thread, old_worker)
+      retire(old_thread, old_worker)
 
     # 创建 worker 和线程
     self._fetch_worker = _FetchBookWorker(self._api, isbn)

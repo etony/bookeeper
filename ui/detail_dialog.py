@@ -22,33 +22,11 @@ LOG = logging.getLogger(__name__)
 from services import get_repo
 from core.models.book import Book
 from services.douban import DoubanService
+from ui.thread_utils import RETIRED as _retired_threads, retire as _retire_thread
 
 # 图书缓存最大数量——超过时淘汰最早访问的（LRU 策略）
 # 避免频繁翻页时反复从数据库加载
 _MAX_CACHE = 50
-
-# 已退役但可能仍在运行的后台线程 (thread, worker)（封面下载 / 豆瓣补充）。
-# 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃。
-# 线程自然结束后由下一次 _prune_retired_threads() 释放。
-_retired_threads = []
-
-
-def _retire_thread(thread, worker):
-  """退役一个后台线程：引用交给看护列表，并顺带清理已结束的"""
-  _retired_threads.append((thread, worker))
-  _prune_retired_threads()
-
-
-def _prune_retired_threads():
-  alive = []
-  for thread, worker in _retired_threads:
-    try:
-      running = thread.isRunning()
-    except RuntimeError:
-      running = False          # C++ 对象已被销毁
-    if running:
-      alive.append((thread, worker))
-  _retired_threads[:] = alive
 
 
 class _CoverWorker(QObject):

@@ -2,23 +2,7 @@
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
-# 已请求停止但 wait() 未能确认退出的线程 (thread, worker)。
-# 必须保留引用：运行中的 QThread 被 GC 销毁会直接 abort 整个进程。
-# 线程自然结束后由下一次 _retire() 清理。
-_RETIRED = []
-
-
-def _retire(thread, worker):
-  """把线程引用交给看护列表保活，并顺带清理已结束的"""
-  _RETIRED.append((thread, worker))
-  for item in list(_RETIRED):
-    t = item[0]
-    try:
-      finished = not t.isRunning()
-    except RuntimeError:
-      finished = True       # C++ 对象已销毁
-    if finished:
-      _RETIRED.remove(item)
+from ui.thread_utils import RETIRED as _RETIRED, retire as _retire
 
 
 class _WebWorker(QObject):
