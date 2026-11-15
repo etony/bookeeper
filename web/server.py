@@ -50,6 +50,9 @@ class BookWebServer:
     self._repo = get_repo()
     self._app = FastAPI(title='Bookeeper API')
     self._server = None
+    # stop() 可能早于 start() 到达（用户点了启动又立刻点停止）：
+    # 用标志记住停止请求，start() 在真正进入服务循环前检查并立即返回
+    self._stop_requested = False
     # uvicorn 开始监听后的回调（在服务线程中调用）
     self._on_started = on_started
     # 数据变更回调（Web端修改数据后通知GUI刷新）
@@ -372,6 +375,9 @@ class BookWebServer:
                             log_level='warning', log_config=None)
     server = uvicorn.Server(config)
     self._server = server
+    # 停止请求早于服务创建：不要进入服务循环，直接返回
+    if self._stop_requested:
+      return
 
     async def _serve():
       task = loop.create_task(server.serve())
@@ -384,9 +390,18 @@ class BookWebServer:
         self._on_started()
       await task
 
-    loop.run_until_complete(_serve())
+    try:
+      loop.run_until_complete(_serve())
+    except SystemExit as e:
+      # uvicorn 绑定端口失败时直接 sys.exit(1)（BaseException，上层的
+      # except Exception 接不住；PyQt 里 SystemExit 逃出槽函数会终止整个进程）。
+      # 转成普通异常，让 UI 能显示可读的错误。
+      raise RuntimeError(
+        f'端口 {Config.WEB_PORT} 启动失败：可能已被其他程序占用，'
+        f'请关闭占用该端口的程序或修改配置中的 web_port') from e
 
   def stop(self):
-    """停止服务"""
+    """停止服务（可能早于 start()，此时由 _stop_requested 标志兜底）"""
+    self._stop_requested = True
     if self._server:
       self._server.should_exit = True

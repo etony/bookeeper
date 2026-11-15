@@ -2,6 +2,24 @@
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
+# 已请求停止但 wait() 未能确认退出的线程 (thread, worker)。
+# 必须保留引用：运行中的 QThread 被 GC 销毁会直接 abort 整个进程。
+# 线程自然结束后由下一次 _retire() 清理。
+_RETIRED = []
+
+
+def _retire(thread, worker):
+  """把线程引用交给看护列表保活，并顺带清理已结束的"""
+  _RETIRED.append((thread, worker))
+  for item in list(_RETIRED):
+    t = item[0]
+    try:
+      finished = not t.isRunning()
+    except RuntimeError:
+      finished = True       # C++ 对象已销毁
+    if finished:
+      _RETIRED.remove(item)
+
 
 class _WebWorker(QObject):
   """
@@ -20,17 +38,26 @@ class _WebWorker(QObject):
   def __init__(self):
     super().__init__()
     self._server = None
+    self._stop_requested = False
 
   def run(self):
     try:
+      if self._stop_requested:
+        return
       from web.server import BookWebServer
       self._server = BookWebServer(on_started=self.started.emit,
                                    on_data_changed=self.data_changed.emit)
+      # stop() 可能在上一步之间到达：server 已创建但还没启动，直接不启动
+      if self._stop_requested:
+        return
       self._server.start()
     except Exception as e:
       self.failed.emit(str(e))
 
   def stop(self):
+    # 先置标志：即使服务尚未创建（run 还没走到 start），
+    # 之后的 start() 也会立即返回而不是进入服务循环
+    self._stop_requested = True
     if self._server:
       self._server.stop()
 
@@ -80,24 +107,30 @@ class WebManager(QObject):
     if not self.is_running:
       return
 
-    self._worker.stop()
-    self._thread.quit()
-    self._thread.wait(3000)
+    worker, thread = self._worker, self._thread
+    worker.stop()
+    thread.quit()
+    if not thread.wait(3000):
+      # 没能在超时内退出：不能丢弃运行中线程的引用（GC 会 abort 整个进程），
+      # 交给看护列表，等它自己结束
+      _retire(thread, worker)
     self._worker = None
     self._thread = None
     self.server_stopped.emit()
 
   def cleanup(self):
     """清理资源（关闭窗口时调用）"""
-    if self.is_running:
-      self._worker.stop()
-      self._thread.quit()
-      if not self._thread.wait(5000):  # 等待5秒
-        self._thread.terminate()  # 强制终止
-        self._thread.wait(1000)  # 再等1秒确保清理
-      self._worker = None
-      self._thread = None
-      self.server_stopped.emit()
+    if not self.is_running:
+      return
+    worker, thread = self._worker, self._thread
+    worker.stop()
+    thread.quit()
+    if not thread.wait(5000):
+      # 同上：不 terminate()（强杀线程会破坏解释器状态），改为保活等待自然退出
+      _retire(thread, worker)
+    self._worker = None
+    self._thread = None
+    self.server_stopped.emit()
 
   def _on_server_started(self):
     """服务启动成功回调"""
@@ -105,8 +138,11 @@ class WebManager(QObject):
 
   def _on_error(self, msg: str):
     """服务启动失败回调"""
-    self._thread.quit()
-    self._thread.wait(3000)
+    worker, thread = self._worker, self._thread
+    if thread is not None:
+      thread.quit()
+      if not thread.wait(3000):
+        _retire(thread, worker)
     self._worker = None
     self._thread = None
     self.error_occurred.emit(msg)
