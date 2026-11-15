@@ -13,6 +13,12 @@ from contextlib import contextmanager
 
 from config import Config
 from core.models.book import Book
+from utils import clean_isbn
+
+# upsert 时"新值为空则保留旧值"的扩展字段。
+# 这些列不在任何表单里（表单只有 11 个表格列），整行覆盖会把豆瓣抓来的
+# 封面、出版年、链接清空——P0-1 数据丢失的根因。recommend 的"无值"是 '0'。
+_PRESERVED_IF_EMPTY = ('cover_url', 'pubdate', 'douban_url', 'pages', 'recommend')
 
 # ── 数据库建表 DDL ──────────────────────────────────────────
 # SQLite 的 CREATE TABLE IF NOT EXISTS 保证多次运行不会重复建表。
@@ -147,7 +153,16 @@ class BookRepo:
             if k != 'rating_detail'}
     cols = ', '.join(data.keys())
     placeholders = ', '.join('?' for _ in data)
-    updates = ', '.join(f'{k}=excluded.{k}' for k in data)
+    # 扩展字段：新值为空（或 '0'）时保留旧值，避免表单路径清空豆瓣数据
+    assignments = []
+    for k in data:
+      if k in _PRESERVED_IF_EMPTY:
+        assignments.append(
+          f"{k} = CASE WHEN excluded.{k} IN ('', '0') "
+          f"THEN books.{k} ELSE excluded.{k} END")
+      else:
+        assignments.append(f'{k} = excluded.{k}')
+    updates = ', '.join(assignments)
     sql = f'''
       INSERT INTO books ({cols}) VALUES ({placeholders})
       ON CONFLICT(isbn) DO UPDATE SET {updates}, updated_at=CURRENT_TIMESTAMP
@@ -277,13 +292,14 @@ class BookRepo:
     使用单个数据库连接完成所有 upsert，大幅提升导入性能。
     progress_callback(current, total) 每 100 行回调一次。
 
-    返回成功导入的条数（跳过了 ISBN 为空的行）。
+    返回成功导入的条数（ISBN 清洗后为空的行会被跳过）。
     """
     imported = 0
     total = len(df)
     with self._conn() as conn:
       for i, (_, row) in enumerate(df.iterrows()):
-        isbn = str(row.get('ISBN', ''))
+        # 先清洗 ISBN（去连字符/空格），否则同一本书会因格式不同产生重复记录
+        isbn = clean_isbn(str(row.get('ISBN', '')))
         if not isbn:
           continue
         # 先读取已有记录，保留扩展字段不被覆盖

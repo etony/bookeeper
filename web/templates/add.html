@@ -3,6 +3,9 @@
 {% block title %}添加图书 - Bookeeper{% endblock %}
 
 {% block content %}
+{% if error %}
+<div class="msg msg-err">{{ error }}</div>
+{% endif %}
 <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
   <form method="get" action="/add" style="display:flex;gap:8px;align-items:center;padding:0;border:none;background:none;margin:0">
     <label style="margin:0;white-space:nowrap">ISBN</label>

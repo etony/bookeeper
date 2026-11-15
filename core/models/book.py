@@ -41,7 +41,8 @@ class Book(BaseModel):
             return None
         
         book = cls()
-        book.isbn = str(data.get('isbn13', ''))
+        # 缺 isbn13 时回退 isbn10，避免产生空 ISBN 主键（会互相覆盖）
+        book.isbn = str(data.get('isbn13', '') or data.get('isbn10', '') or '')
         book.title = str(data.get('title', ''))
         
         authors = data.get('author', []) or []

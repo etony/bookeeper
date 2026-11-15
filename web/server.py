@@ -135,15 +135,43 @@ class BookWebServer:
       })
 
     @app.post('/add')
-    def add_submit(isbn: str = Form(...), title: str = Form(''), author: str = Form(''),
+    def add_submit(request: Request, isbn: str = Form(''), title: str = Form(''), author: str = Form(''),
                    publisher: str = Form(''), price: str = Form(''), rating: str = Form('0'),
                    status: str = Form('默认'), shelf: str = Form(''),
                    start_date: str = Form(''), end_date: str = Form('')):
       """提交添加图书表单"""
       from core.models.book import Book
+      from utils import clean_isbn
+      raw_isbn = isbn
+      isbn = clean_isbn(isbn)
+      if not isbn:
+        # 空 ISBN 会互相覆盖：拒绝入库，回显用户填写的内容
+        vals = dict(isbn=raw_isbn, title=title, author=author, publisher=publisher,
+                    price=price, rating=rating, status=status, shelf=shelf,
+                    start_date=start_date, end_date=end_date)
+        return self._templates.TemplateResponse(request, "add.html", {
+          "isbn": raw_isbn,
+          "vals": vals,
+          "statuses": Config.STATUSES,
+          "error": "ISBN 不能为空：ISBN 是图书的唯一标识，缺少 ISBN 的记录会互相覆盖。",
+        }, status_code=400)
       book = Book(isbn=isbn, title=title, author=author, publisher=publisher,
                   price=price, rating=rating, status=status, shelf=shelf,
                   start_date=_valid_date(start_date), end_date=_valid_date(end_date))
+      existing = self._repo.get_by_isbn(isbn)
+      if existing:
+        # 已存在的书：添加表单没有预填旧值，用户没见过的状态/书柜/日期
+        # 保持表单默认时不覆盖旧值（要修改请用编辑页）；非默认值视为明确选择。
+        # 扩展字段（封面/出版年/链接/页数/推荐度）由 repo.upsert 统一保留。
+        if status == Config.DEFAULT_STATUS:
+          book.status = existing.status
+        if not shelf:
+          book.shelf = existing.shelf
+        if not book.start_date:
+          book.start_date = existing.start_date
+        if not book.end_date:
+          book.end_date = existing.end_date
+        book.raters = existing.raters  # 添加表单没有"人数"字段
       self._repo.upsert(book)
       if self._on_data_changed:
         self._on_data_changed()

@@ -27,6 +27,7 @@ from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService
 from services.undo import UndoManager, AddBookCommand, DeleteBookCommand, UpdateBookCommand
+from utils import clean_isbn
 
 from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
@@ -398,7 +399,7 @@ class MainWindow(QMainWindow):
 
   def _fetch_book(self):
     """从豆瓣 API 获取 ISBN 对应的图书信息并填入表单"""
-    from utils import clean_isbn, is_valid_isbn13, is_valid_isbn10
+    from utils import is_valid_isbn13, is_valid_isbn10
     isbn = self._book_form.get_isbn()
     if not isbn:
       return
@@ -455,6 +456,11 @@ class MainWindow(QMainWindow):
     self._book_form.set_fetch_enabled(True)
     self._book_form.set_fetch_text('🌐 获取信息')
 
+    if not book.isbn:
+      # 空 ISBN 不能入库（会被当作主键互相覆盖）：表单照填，方便手动补全后保存
+      self._book_form.fill_form(book)
+      self.statusBar().showMessage('豆瓣未返回 ISBN，未保存。请补全 ISBN 后点「更新记录」。')
+      return
     self._merge_user_fields(book)
     self._book_form.fill_form(book)
     # 已存在的书走 Update，否则撤销会误删整条记录
@@ -480,14 +486,15 @@ class MainWindow(QMainWindow):
     """
     从表单读取数据，更新到数据库（使用增量更新）。
     """
-    isbn = self._book_form.get_isbn()
-    title = self._book_form.get_form_data()['title']
-    if not isbn and not title:
-      QMessageBox.warning(self, '信息不完整', '请至少填写 ISBN 或书名，然后再点击更新。')
+    isbn = clean_isbn(self._book_form.get_isbn())
+    if not isbn:
+      QMessageBox.warning(self, 'ISBN 不能为空',
+        'ISBN 是图书的唯一标识，缺少 ISBN 的记录会互相覆盖。\n\n'
+        '请填写 ISBN 后再点击更新。')
       return
-    
+
     row_data = self._book_form.get_row_data()
-    
+    row_data[0] = isbn  # 以清洗后的 ISBN 为准，连字符/空格不会产生重复记录
     book = Book(
       isbn=row_data[0], title=row_data[1], author=row_data[2], publisher=row_data[3],
       price=row_data[4], rating=row_data[5], raters=row_data[6], status=row_data[7],
@@ -630,6 +637,11 @@ class MainWindow(QMainWindow):
 
   def _on_search_result(self, book: Book):
     """豆瓣搜索结果回调：填入表单并存入数据库"""
+    if not book.isbn:
+      # 空 ISBN 不能入库：表单照填，方便手动补全后保存
+      self._book_form.fill_form(book)
+      self.statusBar().showMessage('豆瓣未返回 ISBN，未保存。请补全 ISBN 后点「更新记录」。')
+      return
     self._merge_user_fields(book)
     # 如果是新书（ISBN不存在）且购书日期为空，设置为当前日期
     if not book.start_date:
