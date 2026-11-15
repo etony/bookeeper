@@ -26,7 +26,8 @@ services._repo = None  # 丢弃可能已用真实路径创建的单例
 
 # init_config() 会把配置回写 Config 静态类（P0 修复），测试污染需要整体快照还原
 _CONFIG_KEYS = ('DB_PATH', 'WEB_PORT', 'BACKUP_KEEP', 'BACKUP_INTERVAL_MS',
-                'DOUBAN_API_KEY', 'DOUBAN_API_KEY_SEARCH', 'HEADERS')
+                'DOUBAN_API_KEY', 'DOUBAN_API_KEY_SEARCH', 'HEADERS',
+                'APP_NAME', 'APP_VERSION')
 
 
 @pytest.fixture(autouse=True)

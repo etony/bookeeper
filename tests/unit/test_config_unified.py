@@ -192,3 +192,40 @@ class TestDeprecatedConfig:
         finally:
             os.unlink(path)
         # conftest 的 _isolate_config 会在测试后还原 Config 静态类
+
+
+class TestDeadConfigCleanup:
+    """config.json 里每一项都必须真正生效；从未生效的死键要移除"""
+
+    def test_init_config_applies_name_and_version(self):
+        """name/version 真正生效（原先只加载验证、从不回写 Config）"""
+        import json
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"name": "MyShelf", "version": "9.9.9",
+                       "database_path": Config.DB_PATH}, f)
+            path = f.name
+        try:
+            init_config(path)
+            assert Config.APP_NAME == "MyShelf"
+            assert Config.APP_VERSION == "9.9.9"
+        finally:
+            os.unlink(path)
+
+    def test_dead_keys_removed_from_schema(self):
+        """web_host / douban_book_url 从未被应用，已从 schema 移除"""
+        from config.schema import DEFAULT_SCHEMA
+        assert "web_host" not in DEFAULT_SCHEMA.fields
+        assert "douban_book_url" not in DEFAULT_SCHEMA.fields
+
+    def test_legacy_config_with_dead_keys_still_loads(self):
+        """老 config.json 残留死键不影响加载（schema 会丢弃未知键）"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            f.write('{"web_host": "0.0.0.0", '
+                    '"douban_book_url": "https://example.com", '
+                    '"web_port": 9100}')
+            path = f.name
+        try:
+            mgr = ConfigManager(path)
+            assert mgr.config.web.port == 9100
+        finally:
+            os.unlink(path)

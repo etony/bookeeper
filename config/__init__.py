@@ -111,11 +111,9 @@ class ConfigManager:
             "version": config.version,
             "douban_api_key": config.douban.api_key,
             "douban_api_key_search": config.douban.api_key_search,
-            "douban_book_url": config.douban.book_url,
             "douban_headers": config.douban.headers,
             "database_path": config.database.path,
             "web_port": config.web.port,
-            "web_host": config.web.host,
             "backup_keep": config.backup.keep,
             "backup_interval_ms": config.backup.interval_ms,
         }
@@ -133,7 +131,6 @@ class ConfigManager:
             douban=DoubanConfig(
                 api_key=data.get("douban_api_key", d.douban.api_key),
                 api_key_search=data.get("douban_api_key_search", d.douban.api_key_search),
-                book_url=data.get("douban_book_url", d.douban.book_url),
                 headers=headers,
             ),
             database=DatabaseConfig(
@@ -141,7 +138,6 @@ class ConfigManager:
             ),
             web=WebConfig(
                 port=data.get("web_port", d.web.port),
-                host=data.get("web_host", d.web.host),
             ),
             backup=BackupConfig(
                 keep=data.get("backup_keep", d.backup.keep),
@@ -170,6 +166,8 @@ def _apply_to_legacy_config(cfg: AppConfig):
     path = cfg.database.path
     if not os.path.isabs(path):
         path = os.path.join(base_dir, path)
+    Config.APP_NAME = cfg.name
+    Config.APP_VERSION = cfg.version
     Config.DB_PATH = path
     Config.WEB_PORT = cfg.web.port
     Config.BACKUP_KEEP = cfg.backup.keep

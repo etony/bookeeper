@@ -58,7 +58,5 @@ DEFAULT_SCHEMA.add_field(ConfigField("douban_api_key", str, default="0ab215a8b19
 DEFAULT_SCHEMA.add_field(ConfigField("douban_api_key_search", str, default="0ac44ae016490db2204ce0a042db2916"))
 DEFAULT_SCHEMA.add_field(ConfigField("database_path", str, default="books.db"))
 DEFAULT_SCHEMA.add_field(ConfigField("web_port", int, default=8899, min_value=1024, max_value=65535))
-DEFAULT_SCHEMA.add_field(ConfigField("web_host", str, default="127.0.0.1"))
 DEFAULT_SCHEMA.add_field(ConfigField("backup_keep", int, default=30, min_value=1, max_value=365))
 DEFAULT_SCHEMA.add_field(ConfigField("backup_interval_ms", int, default=300000, min_value=60000, max_value=86400000))
-DEFAULT_SCHEMA.add_field(ConfigField("douban_book_url", str, default="https://api.douban.com/v2/book"))

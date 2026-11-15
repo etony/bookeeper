@@ -6,7 +6,6 @@ from typing import Dict
 class DoubanConfig:
     api_key: str = "0ab215a8b1977939201640fa14c66bab"
     api_key_search: str = "0ac44ae016490db2204ce0a042db2916"
-    book_url: str = "https://api.douban.com/v2/book"
     headers: Dict[str, str] = field(default_factory=lambda: {
         "Referer": "https://m.douban.com/tv/american",
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
@@ -19,8 +18,8 @@ class DatabaseConfig:
 
 @dataclass
 class WebConfig:
+    # 只监听本机：这是个人图书管理工具，绑定 0.0.0.0 会把书库暴露到局域网
     port: int = 8899
-    host: str = "127.0.0.1"
 
 @dataclass
 class BackupConfig:
