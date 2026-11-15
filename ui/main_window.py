@@ -31,10 +31,11 @@ from services.undo import (UndoManager, AddBookCommand, DeleteBookCommand,
 from utils import clean_isbn
 
 from ui.theme import DARK_QSS, LIGHT_QSS
-from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
+from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget
 from ui.thread_utils import RETIRED as _retired_threads, retire
 from ui.workers import FetchBookWorker as _FetchBookWorker
 from ui.backup_controller import BackupController
+from ui.web_controller import WebController
 
 # 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
@@ -83,12 +84,12 @@ class MainWindow(QMainWindow):
     self._setup_backup_timer()
     self._load_settings()
 
-    # 初始化 Web 管理器
-    self._web_manager = WebManager(self)
-    self._web_manager.server_started.connect(self._on_web_started)
-    self._web_manager.server_stopped.connect(self._on_web_stopped)
-    self._web_manager.error_occurred.connect(self._on_web_failed)
-    self._web_manager.data_changed.connect(self._on_web_data_changed)  # 安全跨线程投递
+    # Web 服务（线程与浏览器打开都在 ui/web_controller.py 里）
+    self._web = WebController(self)
+    self._web.started.connect(self._on_web_started)
+    self._web.stopped.connect(self._on_web_stopped)
+    self._web.failed.connect(self._on_web_failed)
+    self._web.data_changed.connect(self._on_web_data_changed)
 
   # ══════════════════════════════════════════════
   #  UI 构建
@@ -405,7 +406,7 @@ class MainWindow(QMainWindow):
     self._fetch_worker = None
     if thread is not None:
       retire(thread, worker)
-    self._web_manager.cleanup()
+    self._web.cleanup()
     s = self._settings()
     geo = self.saveGeometry().data()
     if geo:
@@ -776,26 +777,24 @@ class MainWindow(QMainWindow):
   #  Web 服务
   # ══════════════════════════════════════════════
 
+  @property
+  def _web_manager(self):
+    """底层 WebManager（兼容旧引用，实际归 WebController 管理）"""
+    return self._web.manager
+
   def _toggle_web(self):
-    """
-    启动/停止内嵌 FastAPI Web 服务。
-    """
-    if self._web_manager.is_running:
-      self._web_manager.stop_server()
-      self._toolbar.set_web_running(False)
-      self.statusBar().showMessage('Web 服务已停止')
+    """启动/停止内嵌 FastAPI Web 服务"""
+    if self._web.is_running:
+      self._web.stop()
     else:
       self._toolbar.set_web_starting()
       self.statusBar().showMessage('正在启动 Web 服务...')
-      self._web_manager.start_server()
+      self._web.start()
 
-  def _on_web_started(self):
-    """Web 服务启动成功：更新按钮状态，自动打开浏览器"""
-    url = f'http://127.0.0.1:{Config.WEB_PORT}'
+  def _on_web_started(self, url: str):
+    """Web 服务启动成功：更新按钮状态（浏览器已由控制器打开）"""
     self._toolbar.set_web_running(True)
     self.statusBar().showMessage(f'Web 服务已启动: {url}')
-    import webbrowser
-    webbrowser.open(url)
 
   def _on_web_stopped(self):
     """Web 服务已停止"""
@@ -943,7 +942,7 @@ class MainWindow(QMainWindow):
       txt = f'已筛选 {visible}/{total} 条记录'
 
     # Web服务状态
-    web_running = getattr(self, '_web_manager', None) and self._web_manager.is_running
+    web_running = getattr(self, '_web', None) and self._web.is_running
     web_status = '● Web 运行中' if web_running else '○ Web 已停止'
 
     # 主题模式
