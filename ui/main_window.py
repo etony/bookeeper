@@ -17,7 +17,7 @@ from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout,
   QLabel, QPushButton, QTableView,
-  QFileDialog, QMessageBox, QMenu, QHeaderView, QStatusBar, QProgressDialog,
+  QFileDialog, QMessageBox, QMenu, QHeaderView, QStatusBar,
   QDialog, QListWidget, QListWidgetItem, QDialogButtonBox,
 )
 
@@ -34,7 +34,7 @@ from utils import clean_isbn
 from ui.theme import DARK_QSS, LIGHT_QSS
 from ui.components import BookFormWidget, SearchBarWidget, ToolBarWidget, WebManager
 from ui.thread_utils import RETIRED as _retired_threads, retire
-from ui.workers import FetchBookWorker as _FetchBookWorker, ImportWorker as _ImportWorker
+from ui.workers import FetchBookWorker as _FetchBookWorker
 
 # 已退役但可能仍在运行的豆瓣查询线程 (thread, worker)。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃；
@@ -75,6 +75,8 @@ class MainWindow(QMainWindow):
     self._user_sorted = False
     self._setup_ui()
     self._init_table()
+    from ui.import_export import CsvController
+    self._csv = CsvController(self._repo, self)
     self._connect_signals()
     self._setup_shortcuts()
     self._setup_backup_timer()
@@ -310,8 +312,13 @@ class MainWindow(QMainWindow):
     self._book_form.fetch_requested.connect(self._fetch_book)
     self._book_form.update_requested.connect(self._update_book)
     # 工具栏组件信号
-    self._toolbar.import_requested.connect(self._load_csv)
-    self._toolbar.export_requested.connect(self._save_csv)
+    self._toolbar.import_requested.connect(self._csv.import_csv)
+    self._toolbar.export_requested.connect(self._csv.export_csv)
+    self._csv.imported.connect(self._on_csv_imported)
+    self._csv.busy_changed.connect(
+      lambda busy: self._toolbar.set_load_enabled(not busy))
+    self._csv.exported.connect(
+      lambda path: self.statusBar().showMessage(f'已导出: {path}', 5000))
     self._toolbar.stats_requested.connect(self._show_stats)
     self._toolbar.theme_toggled.connect(self._toggle_theme)
     self._toolbar.douban_search_requested.connect(self._open_search_dialog)
@@ -686,74 +693,18 @@ class MainWindow(QMainWindow):
   # ══════════════════════════════════════════════
 
   def _load_csv(self):
-    """
-    加载 CSV 文件并异步导入到数据库。
+    """加载 CSV 文件并异步导入（实际逻辑见 ui/import_export.py）"""
+    self._csv.import_csv()
 
-    CSV 读取在主线程完成（快速），
-    数据库写入移至后台线程，避免大文件时 UI 冻结。
-    """
-    path, _ = QFileDialog.getOpenFileName(self, '加载 CSV', '.', 'CSV 文件 (*.csv)')
-    if not path:
-      return
-    try:
-      from services.data import load_csv
-      df = load_csv(path)
-    except Exception as e:
-      QMessageBox.warning(self, '导入失败',
-        f'无法读取 CSV 文件：\n{e}\n\n请确认文件格式正确（UTF-8 编码），或选择其他文件。')
-      return
-
-    self._toolbar.set_load_enabled(False)
-    self._import_progress = QProgressDialog('正在导入 CSV...', None, 0, len(df), self)
-    self._import_progress.setWindowTitle('导入中')
-    self._import_progress.setMinimumDuration(0)
-    self._import_progress.show()
-
-    self._import_thread = QThread()
-    self._import_worker = _ImportWorker(self._repo, df)
-    self._import_worker.moveToThread(self._import_thread)
-    self._import_thread.started.connect(self._import_worker.run)
-    self._import_worker.progress.connect(self._on_import_progress)
-    self._import_worker.finished.connect(self._on_import_finished)
-    self._import_worker.failed.connect(self._on_import_failed)
-    self._import_thread.start()
-
-  def _on_import_progress(self, current, total):
-    if self._import_progress and not self._import_progress.wasCanceled():
-      self._import_progress.setValue(current)
-
-  def _on_import_finished(self, count):
-    if self._import_progress:
-      self._import_progress.close()
-    self._import_thread.quit()
-    self._import_thread.wait(3000)
-    self._toolbar.set_load_enabled(True)
+  def _on_csv_imported(self, count):
+    """导入完成：标脏、刷新表格、更新工具栏标签"""
     self._mark_dirty()
     self._load_data()
     self._toolbar.set_file_label(f'已导入 {count} 条')
-    QMessageBox.information(self, '提示', f'导入完成，共处理 {count} 条记录')
-
-  def _on_import_failed(self, msg):
-    if self._import_progress:
-      self._import_progress.close()
-    self._import_thread.quit()
-    self._import_thread.wait(3000)
-    self._toolbar.set_load_enabled(True)
-    QMessageBox.warning(self, '错误', f'导入失败: {msg}')
 
   def _save_csv(self):
-    """导出全部数据为 CSV 文件"""
-    path, _ = QFileDialog.getSaveFileName(self, '保存 CSV', '.', 'CSV 文件 (*.csv)')
-    if not path:
-      return
-    try:
-      df = self._repo.export_df()
-      from services.data import save_csv
-      save_csv(path, df)
-      QMessageBox.information(self, '导出成功', 'CSV 文件已保存。')
-    except Exception as e:
-      QMessageBox.warning(self, '导出失败',
-        f'无法保存 CSV 文件：\n{e}\n\n请检查文件路径是否可写，或选择其他位置。')
+    """导出全部数据为 CSV 文件（实际逻辑见 ui/import_export.py）"""
+    self._csv.export_csv()
 
   def _restore_backup(self):
     """从备份恢复数据库"""
