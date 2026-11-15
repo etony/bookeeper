@@ -36,6 +36,8 @@ class Config:
     }
     
     # ── 界面尺寸与列定义 ──────────────────────────────────────
+    # 强调色唯一来源（ui/theme.py 的 QSS 与 Web 模板都从这里取）
+    ACCENT = '#e8922a'
     TABLE_COLUMNS = ['ISBN', '书名', '作者', '出版', '价格', '评分', '人数', '状态', '书柜', '购书日期', '已读日期']
     MAIN_WINDOW_SIZE = (1000, 800)
     SEARCH_DIALOG_SIZE = (700, 420)

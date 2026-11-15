@@ -1,29 +1,36 @@
 # 公共 QSS 样式（所有主题共享的基础样式）
-ACCENT = '#e8922a'  # 强调色，所有组件共用
+from config import Config
+
+ACCENT = Config.ACCENT  # 强调色唯一来源（config.Config.ACCENT）
 DIALOG_MARGINS = (12, 12, 12, 12)  # 对话框统一边距
 DIALOG_SPACING = 8  # 对话框统一间距
+
+
+def _qss(text: str) -> str:
+  """把模板里的 $ACCENT 占位符替换为强调色（避免 QSS 里硬编码色值）"""
+  return text.replace('$ACCENT', ACCENT)
 
 # 主题配色（统计面板等共用）
 DARK_BG = '#1c1c1f'
 DARK_FG = '#e0e0e4'
 LIGHT_BG = '#f8f6f2'
 LIGHT_FG = '#2c3e50'
-BASE = '''
+BASE = _qss('''
 QWidget { font-size: 13px; }
 QLineEdit, QComboBox, QTextBrowser {
   border-radius: 5px; padding: 5px 8px; border: 2px solid transparent;
 }
 QDateEdit { border-radius: 5px; padding: 5px 4px; border: 2px solid transparent; }
-QLineEdit:focus, QComboBox:focus, QDateEdit:focus { border-color: #e8922a; }
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus { border-color: $ACCENT; }
 QLineEdit:disabled, QComboBox:disabled, QDateEdit:disabled {
   background-color: #f0f0f0; color: #a0a0a0; border: 1px solid #d0d0d0;
 }
 QPushButton {
   border-radius: 5px; padding: 6px 18px; font-weight: 500;
 }
-QPushButton:hover { border-color: #e8922a; }
+QPushButton:hover { border-color: $ACCENT; }
 QPushButton:pressed { padding-top: 7px; padding-bottom: 5px; }
-QPushButton:focus { outline: none; border: 2px solid #e8922a; }
+QPushButton:focus { outline: none; border: 2px solid $ACCENT; }
 QGroupBox {
   border: 1px solid; border-radius: 8px; margin-top: 6px;
   padding-top: 14px; padding-bottom: 6px; padding-left: 8px; padding-right: 8px;
@@ -34,7 +41,7 @@ QGroupBox::title {
 }
 QTableView { border: 1px solid; border-radius: 6px; outline: none; }
 QTableView::item { padding: 4px 8px; }
-QTableView:focus { border: 2px solid #e8922a; }
+QTableView:focus { border: 2px solid $ACCENT; }
 QHeaderView::section {
   border: none; padding: 6px 10px; font-weight: 600;
 }
@@ -62,17 +69,17 @@ QMenu { padding: 4px; border-radius: 6px; }
 QMenu::item { padding: 6px 28px 6px 16px; border-radius: 3px; }
 QMessageBox QPushButton { min-width: 70px; }
 QCalendarWidget QToolButton { font-size: 12px; }
-'''
+''')
 
 # 暗色主题 QSS：深灰背景 + 橙色强调
-DARK_QSS = BASE + '''
+DARK_QSS = BASE + _qss('''
 QWidget { background-color: #1c1c1f; color: #e0e0e4; }
 QLineEdit, QComboBox, QTextBrowser {
   background-color: #26262b; border: 1px solid #38383f; color: #eaeaea;
 }
 QDateEdit { background-color: #26262b; border: 1px solid #38383f; color: #eaeaea; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
-  border-color: #e8922a; background-color: #202025;
+  border-color: $ACCENT; background-color: #202025;
 }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox::down-arrow {
@@ -85,7 +92,7 @@ QComboBox QAbstractItemView {
   selection-background-color: #3a3528;
 }
 QPushButton { background-color: #2c2c33; border: 1px solid #3a3a42; color: #e0e0e4; }
-QPushButton:hover { background-color: #363640; border-color: #e8922a; }
+QPushButton:hover { background-color: #363640; border-color: $ACCENT; }
 QPushButton:pressed { background-color: #222228; }
 QPushButton:disabled { background-color: #202024; color: #5a5a60; }
 QGroupBox { background-color: #242428; border-color: #323238; }
@@ -97,8 +104,8 @@ QTableView {
 }
 QTableView::item:hover { background-color: #2a2825; }
 QTableView::item:selected {
-  background-color: #e8922a; color: #1c1c1f;
-  border: 1px solid #e8922a;
+  background-color: $ACCENT; color: #1c1c1f;
+  border: 1px solid $ACCENT;
 }
 QHeaderView::section {
   background-color: #26262b;
@@ -122,17 +129,17 @@ QToolTip {
   border-radius: 4px; font-size: 12px;
 }
 
-'''
+''')
 
 # 亮色主题 QSS：米白背景 + 橙色强调
-LIGHT_QSS = BASE + '''
+LIGHT_QSS = BASE + _qss('''
 QWidget { background-color: #f8f6f2; color: #2c3e50; }
 QLineEdit, QComboBox, QTextBrowser {
   background-color: #ffffff; border: 1px solid #d8d6d0; color: #2c3e50;
 }
 QDateEdit { background-color: #ffffff; border: 1px solid #d8d6d0; color: #2c3e50; }
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
-  border-color: #e8922a; background-color: #fefcf8;
+  border-color: $ACCENT; background-color: #fefcf8;
 }
 QComboBox::drop-down { border: none; width: 26px; }
 QComboBox::down-arrow {
@@ -145,7 +152,7 @@ QComboBox QAbstractItemView {
   selection-background-color: #f0e8d8;
 }
 QPushButton { background-color: #e8e6e0; border: 1px solid #d8d6d0; color: #2c3e50; }
-QPushButton:hover { background-color: #e0dcd4; border-color: #e8922a; }
+QPushButton:hover { background-color: #e0dcd4; border-color: $ACCENT; }
 QPushButton:pressed { background-color: #d0ccc4; }
 QPushButton:disabled { background-color: #f0eeea; color: #9a9a9a; }
 QGroupBox { background-color: #ffffff; border-color: #e0ded8; }
@@ -177,4 +184,4 @@ QToolTip {
   border: 1px solid #d8d6d0; padding: 4px 8px;
   border-radius: 4px; font-size: 12px;
 }
-'''
+''')

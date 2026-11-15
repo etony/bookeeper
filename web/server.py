@@ -60,6 +60,8 @@ class BookWebServer:
     # 配置Jinja2模板
     templates_dir = Path(__file__).parent / 'templates'
     self._templates = Jinja2Templates(directory=str(templates_dir))
+    # 强调色与桌面端同源（Config.ACCENT），避免两套 CSS 各写一份色值
+    self._templates.env.globals['accent'] = Config.ACCENT
     self._setup_routes()
 
   def _setup_routes(self):

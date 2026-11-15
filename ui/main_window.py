@@ -211,9 +211,17 @@ class MainWindow(QMainWindow):
     从数据库重新加载全量数据到表格。
 
     每次增删改查后调用此方法刷新界面。
-    数据通过 DataFrame 传给 BookTableModel.load_dataframe()。
     """
-    books = self._repo.get_all()
+    self._set_table_data(self._repo.get_all())
+    self._update_status()
+
+  def _set_table_data(self, books):
+    """
+    把一组图书灌进表格（全量刷新）。
+
+    _load_data（全部）与 _on_search_requested（筛选结果）共用，
+    避免两处各拼一份 DataFrame 逻辑。
+    """
     rows = [b.to_row() for b in books]
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
@@ -222,7 +230,6 @@ class MainWindow(QMainWindow):
     # 同时更新封面墙数据
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
-    self._update_status()
 
   def _reapply_user_sort(self):
     """
@@ -648,16 +655,7 @@ class MainWindow(QMainWindow):
 
   def _on_search_requested(self, keyword: str, status: str):
     """搜索栏发出搜索请求的槽函数"""
-    books = self._repo.search(keyword, status)
-    rows = [b.to_row() for b in books]
-    cols = Config.TABLE_COLUMNS
-    df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
-    self._model.load_dataframe(df)
-    # 搜索同样要重新应用用户排序（load_dataframe 重置为 rowid DESC）
-    self._reapply_user_sort()
-    # 同时更新封面墙数据
-    if hasattr(self, '_cover_wall'):
-      self._cover_wall.set_books(books)
+    self._set_table_data(self._repo.search(keyword, status))
     self._update_status()
     # 重置搜索按钮文字
     self._search_bar.reset_search_button()

@@ -6,7 +6,7 @@
     <title>{% block title %}Bookeeper{% endblock %}</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        :root{--bg:#1c1c1f;--surface:#242428;--surface2:#2c2c31;--border:#323238;--border-hover:#404048;--text:#e0e0e4;--text2:#9a9aa0;--text3:#6a6a70;--accent:#e8922a;--accent-hover:#f0a840;--accent-dim:#8a6020;--danger:#e05050;--danger-bg:#3a1818;--radius:8px;--radius-sm:4px}
+        :root{--bg:#1c1c1f;--surface:#242428;--surface2:#2c2c31;--border:#323238;--border-hover:#404048;--text:#e0e0e4;--text2:#9a9aa0;--text3:#6a6a70;--accent:{{ accent }};--accent-hover:#f0a840;--accent-dim:#8a6020;--danger:#e05050;--danger-bg:#3a1818;--radius:8px;--radius-sm:4px}
         body{font-family:-apple-system,"Microsoft YaHei","Noto Sans SC",sans-serif;background:var(--bg);color:var(--text);padding:24px;font-size:14px;line-height:1.6}
         a{color:var(--accent);text-decoration:none}
         a:hover{color:var(--accent-hover);text-decoration:underline}
