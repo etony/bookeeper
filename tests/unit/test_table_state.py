@@ -49,7 +49,9 @@ def settings_file(tmp_path):
 @pytest.fixture
 def state(view, settings_file):
   from ui.table_state import TableState
-  return TableState(view, view.model(), lambda: settings_file)
+  # ISBN 列（0）在恢复表头状态后必须保持 ResizeToContents
+  return TableState(view, view.model(), lambda: settings_file,
+                    resize_to_contents_sections=(0,))
 
 
 def _fill(view, rows):
@@ -132,6 +134,22 @@ class TestLoad:
     state.load(lambda: None)
     assert state.user_sorted is False, \
       'restoreState 内部触发的排序不得被当成用户排序'
+
+  def test_load_keeps_resize_to_contents_sections(self, state, view,
+                                                  settings_file):
+    """存量 headerState 可能带 Interactive+窄宽，恢复后必须强制回 ResizeToContents，
+    否则 ISBN 列会按旧窄宽度截断显示"""
+    from PyQt6.QtWidgets import QHeaderView
+    from PyQt6.QtCore import Qt
+    hdr = view.horizontalHeader()
+    hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+    hdr.resizeSection(0, 40)
+    settings_file.setValue(
+      'headerState',
+      base64.b64encode(hdr.saveState().data()).decode('ascii'))
+    state.load(lambda: None)
+    assert hdr.sectionResizeMode(0) == QHeaderView.ResizeMode.ResizeToContents, \
+      '恢复表头状态后 ISBN 列必须仍是 ResizeToContents（否则窄宽截断）'
 
 
 class TestColumns:

@@ -17,17 +17,25 @@
 import base64
 
 from PyQt6.QtCore import QByteArray, QObject, Qt, QTimer
-from PyQt6.QtWidgets import QMenu
+from PyQt6.QtWidgets import QHeaderView, QMenu
 
 
 class TableState(QObject):
-  """QTableView 表头状态的持久化与排序重应用"""
+  """QTableView 表头状态的持久化与排序重应用
 
-  def __init__(self, table, model, settings_factory, parent=None):
+  resize_to_contents_sections：恢复表头状态后必须保持 ResizeToContents 的列号。
+  存量 headerState 可能保存了 Interactive + 被压缩的窄宽度（旧版 Stretch 列），
+  restoreState 会用窄宽度覆盖代码里设的模式——这些列要强制重设，否则长内容
+  （如 13 位 ISBN）会按窄宽截断成省略号。
+  """
+
+  def __init__(self, table, model, settings_factory, parent=None,
+               resize_to_contents_sections=()):
     super().__init__(parent)
     self._table = table
     self._model = model
     self._settings = settings_factory
+    self._resize_to_contents_sections = frozenset(resize_to_contents_sections)
     self._user_sorted = False
     self._save_timer = None
 
@@ -87,6 +95,10 @@ class TableState(QObject):
         hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
       except Exception:
         pass
+      # 存量 headerState 会把每列 resize mode 一并恢复，可能把 ResizeToContents
+      # 盖成旧 Interactive + 窄宽度（长内容如 13 位 ISBN 被截断）。强制重设回来。
+      for section in self._resize_to_contents_sections:
+        hdr.setSectionResizeMode(section, QHeaderView.ResizeMode.ResizeToContents)
       hdr.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
       self._user_sorted = False
       if reload_callback:
