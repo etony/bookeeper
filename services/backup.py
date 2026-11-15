@@ -34,6 +34,8 @@ class BackupService:
   def __init__(self, db_path: str = None):
     # db_path 默认取 Config.DB_PATH，也可传入自定义路径（测试用）
     self._db_path = db_path or Config.DB_PATH
+    # 最近一次备份失败的原因（None = 上次备份成功或按 mtime 去重跳过）
+    self.last_error = None
 
   def _latest_backup_path(self, backup_dir: str):
     """返回 backups 目录中最新的备份文件路径，无则返回 None"""
@@ -52,24 +54,25 @@ class BackupService:
       3. 创建 backups/ 目录（不存在则新建）
       4. 以时间戳命名复制数据库
       5. 清理超出保留数量的旧备份
-      6. 所有异常都只打日志，不抛出
+      6. 所有异常都只打日志，不抛出；失败原因记在 last_error
 
     返回备份文件的路径，失败或跳过返回 None。
     """
+    self.last_error = None
     if not os.path.exists(self._db_path):
-      return None
-
-    base_dir = os.path.dirname(self._db_path)
-    backup_dir = os.path.join(base_dir, 'backups')
-    os.makedirs(backup_dir, exist_ok=True)
-
-    latest = self._latest_backup_path(backup_dir)
-    db_mtime = os.path.getmtime(self._db_path)
-    if latest and os.path.getmtime(latest) >= db_mtime:
       return None
 
     path = None
     try:
+      base_dir = os.path.dirname(self._db_path)
+      backup_dir = os.path.join(base_dir, 'backups')
+      os.makedirs(backup_dir, exist_ok=True)
+
+      latest = self._latest_backup_path(backup_dir)
+      db_mtime = os.path.getmtime(self._db_path)
+      if latest and os.path.getmtime(latest) >= db_mtime:
+        return None
+
       ts = time.strftime('%Y%m%d_%H%M%S')
       path = os.path.join(backup_dir, f'book_backup_{ts}.db')
       # SQLite online backup：从正在写入的库取得一致性快照。
@@ -87,6 +90,9 @@ class BackupService:
       self._clean(backup_dir)
       return path
     except (OSError, shutil.Error, sqlite3.Error) as e:
+      # 失败必须可被调用方感知（GUI 用它保留 dirty 标记并提示用户），
+      # 不能只写日志——否则用户永远不知道数据没有备份
+      self.last_error = str(e)
       LOG.error('备份失败: %s', e)
       if path and os.path.exists(path):
         try:

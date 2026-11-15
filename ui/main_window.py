@@ -26,7 +26,9 @@ from core.models.book import Book
 from services import get_repo
 from services.douban import DoubanService
 from services.backup import BackupService
-from services.undo import UndoManager, AddBookCommand, DeleteBookCommand, UpdateBookCommand
+from services.undo import (UndoManager, AddBookCommand, DeleteBookCommand,
+                           UpdateBookCommand, BatchDeleteCommand,
+                           BatchUpdateCommand)
 from utils import clean_isbn
 
 from ui.theme import DARK_QSS, LIGHT_QSS
@@ -371,8 +373,23 @@ class MainWindow(QMainWindow):
     """执行定时备份：数据无变更则跳过（backup 内部还有 mtime 去重）"""
     if not self._dirty:
       return
+    # 推迟到下一轮事件循环执行，避免在定时器回调里做 IO
+    QTimer.singleShot(0, self._run_backup)
+
+  def _run_backup(self):
+    """
+    实际执行备份。
+
+    只有成功才清 dirty 标记：失败时保留标记，下一轮定时器会重试，
+    同时提示用户——不能只写日志，否则数据可能永远没有备份。
+    """
+    self._backup_svc.backup()
+    if self._backup_svc.last_error:
+      self.statusBar().showMessage(
+        f'自动备份失败：{self._backup_svc.last_error}（数据未备份，稍后自动重试）',
+        15000)
+      return
     self._dirty = False
-    QTimer.singleShot(0, self._backup_svc.backup)
 
   def closeEvent(self, event):
     """关闭窗口前：停止 Web 线程 + 保存窗口状态 + 备份"""
@@ -582,25 +599,40 @@ class MainWindow(QMainWindow):
       )
       if ret != QMessageBox.StandardButton.Yes:
         return
-      for isbn in isbn_list:
-        book = self._repo.get_by_isbn(isbn)
-        if book:
-          self._undo_manager.execute(DeleteBookCommand(self._repo, book))
-      self._mark_dirty()
-      self._load_data()
+      self._delete_books(isbn_list)
+
+  def _delete_books(self, isbn_list: list):
+    """
+    批量删除（单事务 + 单条撤销记录）。
+
+    逐条删除时若中途失败，会留下半套数据和半套撤销记录；
+    这里整批一次执行，撤销也只算一步。
+    """
+    books = [b for b in (self._repo.get_by_isbn(i) for i in isbn_list) if b]
+    if not books:
+      return
+    self._undo_manager.execute(BatchDeleteCommand(self._repo, books))
+    self._mark_dirty()
+    self._load_data()
 
   def _batch_update_status(self, isbn_list: list, new_status: str):
-    """批量修改图书状态"""
+    """批量修改图书状态（单事务 + 单条撤销记录）"""
     import copy
+    old_books, new_books = [], []
     for isbn in isbn_list:
       book = self._repo.get_by_isbn(isbn)
       if book:
+        old_books.append(book)
         new_book = copy.copy(book)
         new_book.status = new_status
-        self._undo_manager.execute(UpdateBookCommand(self._repo, book, new_book))
+        new_books.append(new_book)
+    if not old_books:
+      return
+    self._undo_manager.execute(
+      BatchUpdateCommand(self._repo, old_books, new_books))
     self._mark_dirty()
     self._load_data()
-    self.statusBar().showMessage(f'已将 {len(isbn_list)} 本图书设为"{new_status}"')
+    self.statusBar().showMessage(f'已将 {len(new_books)} 本图书设为"{new_status}"')
 
   # ══════════════════════════════════════════════
   #  搜索

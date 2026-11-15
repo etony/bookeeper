@@ -137,16 +137,8 @@ class BookRepo:
       row = conn.execute('SELECT * FROM books WHERE isbn = ?', (isbn,)).fetchone()
       return Book.from_dict(dict(row)) if row else None
 
-  def upsert(self, book: Book) -> bool:
-    """
-    插入或更新（UPSERT）。
-
-    如果 ISBN 已存在 → 更新所有字段
-    如果 ISBN 不存在 → 插入新记录
-
-    这里用了 SQLite 的 ON CONFLICT … DO UPDATE SET 语法，
-    比先 SELECT 判断再 INSERT/UPDATE 更高效，而且线程安全。
-    """
+  def _upsert_parts(self, book: Book):
+    """构造 upsert 的 SQL 和参数（单条与批量共用，保证语义一致）"""
     # 排除 rating_detail——这是豆瓣 API 返回的原始数据，
     # 结构复杂不适合存数据库，只在内存中使用。
     data = {k: v for k, v in book.to_dict().items()
@@ -167,9 +159,38 @@ class BookRepo:
       INSERT INTO books ({cols}) VALUES ({placeholders})
       ON CONFLICT(isbn) DO UPDATE SET {updates}, updated_at=CURRENT_TIMESTAMP
     '''
+    return sql, list(data.values())
+
+  def upsert(self, book: Book) -> bool:
+    """
+    插入或更新（UPSERT）。
+
+    如果 ISBN 已存在 → 更新所有字段
+    如果 ISBN 不存在 → 插入新记录
+
+    这里用了 SQLite 的 ON CONFLICT … DO UPDATE SET 语法，
+    比先 SELECT 判断再 INSERT/UPDATE 更高效，而且线程安全。
+    """
+    sql, params = self._upsert_parts(book)
     with self._conn() as conn:
-      conn.execute(sql, list(data.values()))
+      conn.execute(sql, params)
     return True
+
+  def upsert_many(self, books: List[Book]) -> int:
+    """
+    批量插入/更新（单事务）。
+
+    任一条失败则整批回滚——批量操作（及撤销）不会留下半套数据。
+    返回处理的条数。
+    """
+    books = list(books)
+    if not books:
+      return 0
+    with self._conn() as conn:
+      for book in books:
+        sql, params = self._upsert_parts(book)
+        conn.execute(sql, params)
+    return len(books)
 
   def delete(self, isbn: str) -> bool:
     """
@@ -180,6 +201,20 @@ class BookRepo:
     with self._conn() as conn:
       cur = conn.execute('DELETE FROM books WHERE isbn = ?', (isbn,))
       return cur.rowcount > 0
+
+  def delete_many(self, isbns) -> int:
+    """
+    批量删除（单事务），返回删除的行数。
+
+    任一条失败则整批回滚——批量删除不会留下半套数据。
+    """
+    isbns = [i for i in isbns if i]
+    if not isbns:
+      return 0
+    with self._conn() as conn:
+      cur = conn.executemany('DELETE FROM books WHERE isbn = ?',
+                             [(i,) for i in isbns])
+      return cur.rowcount
 
   # ── 搜索与筛选 ──────────────────────────────────────────
 

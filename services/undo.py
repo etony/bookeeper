@@ -70,6 +70,37 @@ class UpdateBookCommand(UndoCommand):
     self._repo.upsert(self._old_book)
 
 
+class BatchDeleteCommand(UndoCommand):
+  """批量删除命令（单事务执行，一次撤销恢复全部）"""
+
+  def __init__(self, repo, books: List[Book]):
+    super().__init__(f'删除 {len(books)} 本图书')
+    self._repo = repo
+    self._books = list(books)
+
+  def execute(self):
+    self._repo.delete_many([b.isbn for b in self._books])
+
+  def undo(self):
+    self._repo.upsert_many(self._books)
+
+
+class BatchUpdateCommand(UndoCommand):
+  """批量更新命令（单事务执行，一次撤销恢复全部）"""
+
+  def __init__(self, repo, old_books: List[Book], new_books: List[Book]):
+    super().__init__(f'批量更新 {len(new_books)} 本图书')
+    self._repo = repo
+    self._old_books = list(old_books)
+    self._new_books = list(new_books)
+
+  def execute(self):
+    self._repo.upsert_many(self._new_books)
+
+  def undo(self):
+    self._repo.upsert_many(self._old_books)
+
+
 class UndoManager:
   """撤销/重做管理器"""
   
