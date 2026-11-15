@@ -218,17 +218,25 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
-    # load_dataframe 把顺序重置为 rowid DESC，若已应用过排序则重新排一次，
-    # 否则表头箭头与数据顺序会不一致
-    if self._user_sorted:
-      hdr = self._table.horizontalHeader()
-      section = hdr.sortIndicatorSection()
-      if 0 <= section < len(cols):
-        self._model.sort(section, hdr.sortIndicatorOrder())
+    self._reapply_user_sort()
     # 同时更新封面墙数据
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
     self._update_status()
+
+  def _reapply_user_sort(self):
+    """
+    重新应用用户当前的表头排序。
+
+    load_dataframe 总是把顺序重置为 rowid DESC，若用户已排序，
+    必须再排一次，否则表头箭头与数据顺序会不一致。
+    """
+    if not self._user_sorted:
+      return
+    hdr = self._table.horizontalHeader()
+    section = hdr.sortIndicatorSection()
+    if 0 <= section < len(Config.TABLE_COLUMNS):
+      self._model.sort(section, hdr.sortIndicatorOrder())
 
   def _toggle_cover_wall(self):
     """切换表格视图和封面墙视图"""
@@ -645,6 +653,8 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
+    # 搜索同样要重新应用用户排序（load_dataframe 重置为 rowid DESC）
+    self._reapply_user_sort()
     # 同时更新封面墙数据
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
