@@ -19,16 +19,26 @@ import base64
 from PyQt6.QtCore import QByteArray, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QHeaderView, QMenu
 
-# 书名 / 作者列固定 30 字符宽（超出截断显示省略号）。用像素而非字符数：
+# 书名 / 作者列固定字符宽（超出截断显示省略号）。用像素而非字符数：
 # 列宽以像素为单位，字符数需按表头字体换算。
 _TITLE_COLUMN_CHARS = 30
+_AUTHOR_COLUMN_CHARS = 20
+
+
+def column_width(header, chars: int) -> int:
+  """按表头字体把 chars 个字符换算成像素宽度"""
+  fm = header.fontMetrics()
+  return fm.horizontalAdvance('中' * chars)
 
 
 def title_column_width(header) -> int:
-  """按表头字体把 30 个字符换算成像素宽度"""
-  font = header.font()
-  fm = header.fontMetrics()
-  return fm.horizontalAdvance('中' * _TITLE_COLUMN_CHARS)
+  """书名列固定宽度（30 字符）"""
+  return column_width(header, _TITLE_COLUMN_CHARS)
+
+
+def author_column_width(header) -> int:
+  """作者列固定宽度（20 字符）"""
+  return column_width(header, _AUTHOR_COLUMN_CHARS)
 
 
 class TableState(QObject):
