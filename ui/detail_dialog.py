@@ -27,14 +27,14 @@ from services.douban import DoubanService
 # 避免频繁翻页时反复从数据库加载
 _MAX_CACHE = 50
 
-# 已退役但可能仍在运行的封面下载线程 (thread, worker)。
+# 已退役但可能仍在运行的后台线程 (thread, worker)（封面下载 / 豆瓣补充）。
 # 必须保留引用：Python 持有的 QThread 在运行中被 GC 销毁会直接崩溃。
 # 线程自然结束后由下一次 _prune_retired_threads() 释放。
 _retired_threads = []
 
 
-def _retire_cover_thread(thread, worker):
-  """退役一个封面下载线程：引用交给看护列表，并顺带清理已结束的"""
+def _retire_thread(thread, worker):
+  """退役一个后台线程：引用交给看护列表，并顺带清理已结束的"""
   _retired_threads.append((thread, worker))
   _prune_retired_threads()
 
@@ -83,12 +83,50 @@ class _CoverWorker(QObject):
       self.done.emit()
 
 
+class _EnrichWorker(QObject):
+  """
+  后台从豆瓣补充缺失的扩展字段（封面/出版年/豆瓣链接）。
+
+  为什么用独立线程？原先这段请求跑在 GUI 线程：豆瓣客户端带
+  3 次重试 × 10s 超时 + 退避，最坏 ~32 秒，打开缺字段的书会
+  让整个应用"未响应"。与封面下载一样走 QThread + 信号回主线程。
+  """
+
+  ready = pyqtSignal(str, object)   # (isbn, Book) 补充完成
+  done = pyqtSignal()               # 结束（成功/失败/异常都会发）
+
+  def __init__(self, api, repo, book: Book):
+    super().__init__()
+    self._api = api
+    self._repo = repo
+    self._book = book               # 主线程传入的副本，本线程独占
+
+  def run(self):
+    """在工作线程中请求豆瓣并把补充结果写回数据库"""
+    try:
+      api_book = self._api.get_book_by_isbn(self._book.isbn)
+      if api_book:
+        if api_book.cover_url:
+          self._book.cover_url = api_book.cover_url
+        if api_book.pubdate:
+          self._book.pubdate = api_book.pubdate
+        if api_book.douban_url:
+          self._book.douban_url = api_book.douban_url
+        self._repo.upsert(self._book)
+        self.ready.emit(self._book.isbn, self._book)
+    except Exception as e:
+      LOG.warning('豆瓣补充图书信息失败: %s', e)
+    finally:
+      self.done.emit()
+
+
 class DetailDialog(QDialog):
   """
   图书详情对话框。
 
   功能：
     - 展示封面（后台下载，不卡界面）
+    - 数据不完整时后台补充豆瓣信息（独立线程，不卡界面）
     - 展示完整图书信息（含豆瓣链接）
     - 上下翻页浏览列表中的图书
     - LRU 缓存避免重复加载
@@ -105,8 +143,9 @@ class DetailDialog(QDialog):
     self._cache = {}                      # isbn → Book 对象的缓存字典
     self._cache_order = []                # 维护缓存访问顺序（用于 LRU 淘汰）
     self._build_ui()
-    # accept()/reject() 不经过 closeEvent，也要退役下载线程
+    # accept()/reject() 不经过 closeEvent，也要退役后台线程
     self.finished.connect(self._retire_cover_download)
+    self.finished.connect(self._retire_enrichment)
     self._load_current()
 
   def _build_ui(self):
@@ -180,11 +219,10 @@ class DetailDialog(QDialog):
     加载并显示当前索引的图书。
 
     流程：
-      1. 检查缓存中是否有，没有则从数据库加载
-      2. 如果缺少封面或出版日期，尝试从豆瓣 API 补充
-      3. 计算推荐度
-      4. 生成 HTML 信息展示
-      5. 后台下载封面
+      1. 检查缓存中是否有，没有则从数据库读取（本地、瞬时）
+      2. 数据不完整 → 启动后台线程从豆瓣补充（不阻塞 GUI，
+         完成后经 _on_enriched 回来刷新）
+      3. 渲染当前页（计算推荐度、生成 HTML、后台下载封面）
 
     用缓存避免频繁翻页时重复查询数据库。
     """
@@ -201,22 +239,27 @@ class DetailDialog(QDialog):
       self._evict_cache()
       book = self._repo.get_by_isbn(isbn)
 
-      # 如果数据不完整，尝试从豆瓣补充
+      # 数据不完整 → 后台补充。原先这里在 GUI 线程同步调豆瓣 API：
+      # 3 次重试 × 10s 超时 + 退避最坏 ~32 秒，整个应用"未响应"
       if book and (not book.cover_url or not book.pubdate):
-        api_book = self._api.get_book_by_isbn(isbn)
-        if api_book:
-          if api_book.cover_url:
-            book.cover_url = api_book.cover_url
-          if api_book.pubdate:
-            book.pubdate = api_book.pubdate
-          if api_book.douban_url:
-            book.douban_url = api_book.douban_url
-          self._repo.upsert(book)
+        self._start_enrichment(book)
 
       self._cache[isbn] = book
       self._cache_order.append(isbn)
 
-    book = self._cache[isbn]
+    self._render_current()
+
+  def _render_current(self):
+    """
+    渲染当前索引的图书（纯本地操作）。
+
+    与 _load_current 分离：后台补充完成的回调 _on_enriched
+    也能安全地重新渲染，而不必重新读库。
+    """
+    if not self._isbn_list:
+      return
+    isbn = self._isbn_list[self._index % len(self._isbn_list)]
+    book = self._cache.get(isbn)
     if not book:
       return
 
@@ -252,6 +295,47 @@ class DetailDialog(QDialog):
 </table></div>'''
     self._info.setHtml(info_html)
 
+  def _start_enrichment(self, book: Book):
+    """
+    后台线程去豆瓣补充缺失的扩展字段（封面/出版年/豆瓣链接）。
+
+    与封面下载相同的线程管理模式：旧线程不同步 wait（会卡 UI），
+    退役给看护列表让它跑完——结果仍会经 ready 信号回来更新缓存。
+    """
+    self._retire_enrichment()
+    thread = QThread()
+    worker = _EnrichWorker(self._api, self._repo, copy.copy(book))
+    worker.moveToThread(thread)
+    thread.started.connect(worker.run)
+    worker.ready.connect(self._on_enriched)
+    worker.done.connect(thread.quit)      # 失败/无结果也要退出线程
+    self._enrich_thread = thread
+    self._enrich_worker = worker
+    thread.start()
+
+  def _retire_enrichment(self):
+    """把当前补充线程退役（交给看护列表保活，避免运行中被 GC 销毁）"""
+    thread = getattr(self, '_enrich_thread', None)
+    worker = getattr(self, '_enrich_worker', None)
+    self._enrich_thread = None
+    self._enrich_worker = None
+    if thread is not None:
+      _retire_thread(thread, worker)
+
+  def _on_enriched(self, isbn: str, book):
+    """
+    豆瓣补充完成：更新缓存；对话框可见且仍是当前页时刷新显示。
+
+    对话框已隐藏时只更新缓存——不触碰界面控件，
+    更不会在已关闭的对话框上拉起新的封面下载线程。
+    """
+    if isbn in self._cache:
+      self._cache[isbn] = book
+    if self.isHidden() or not self._isbn_list:
+      return
+    if isbn == self._isbn_list[self._index % len(self._isbn_list)]:
+      self._render_current()
+
   def _start_cover_download(self, url: str, isbn: str, referer: str = None):
     """
     在后台线程下载封面图片。
@@ -283,11 +367,12 @@ class DetailDialog(QDialog):
     self._cover_thread = None
     self._cover_worker = None
     if thread is not None:
-      _retire_cover_thread(thread, worker)
+      _retire_thread(thread, worker)
 
   def closeEvent(self, a0):
-    """关闭前退役下载线程，避免线程对象随对话框一起被 GC 销毁"""
+    """关闭前退役后台线程，避免线程对象随对话框一起被 GC 销毁"""
     self._retire_cover_download()
+    self._retire_enrichment()
     super().closeEvent(a0)
 
   def _on_cover_ready(self, isbn: str, data: bytes):
