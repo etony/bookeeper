@@ -12,7 +12,7 @@ import os
 import base64
 
 import pandas as pd
-from PyQt6.QtCore import Qt, QThread, QTimer, QSettings, QDate, QByteArray
+from PyQt6.QtCore import Qt, QThread, QSettings, QDate, QByteArray
 from PyQt6.QtGui import QIcon, QAction, QFont, QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
   QMainWindow, QWidget, QVBoxLayout,
@@ -72,9 +72,7 @@ class MainWindow(QMainWindow):
     self._backup_ctl.failed.connect(
       lambda msg: self.statusBar().showMessage(msg, 15000))
     self._dark_mode = True
-    # 是否已应用过排序（用户点击表头或恢复了上次排序）；
-    # _load_data 全量重载后按此标记重新应用排序，保持箭头与数据一致
-    self._user_sorted = False
+    # 排序标记由 TableState 持有（_init_table 里创建），默认未排序
     self._setup_ui()
     self._init_table()
     from ui.import_export import CsvController
@@ -186,6 +184,9 @@ class MainWindow(QMainWindow):
     df = pd.DataFrame({c: [] for c in Config.TABLE_COLUMNS}, dtype=object)
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
+    # 表头状态（列宽/顺序/可见性/排序）交给 TableState 管理
+    from ui.table_state import TableState
+    self._table_state = TableState(self._table, self._model, self._settings, self)
     # 列宽模式：默认拉伸填满，前三列自动调整内容宽度
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -214,24 +215,14 @@ class MainWindow(QMainWindow):
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
     self._model.load_dataframe(df)
-    self._reapply_user_sort()
+    self._table_state.reapply_sort()
     # 同时更新封面墙数据
     if hasattr(self, '_cover_wall'):
       self._cover_wall.set_books(books)
 
   def _reapply_user_sort(self):
-    """
-    重新应用用户当前的表头排序。
-
-    load_dataframe 总是把顺序重置为 rowid DESC，若用户已排序，
-    必须再排一次，否则表头箭头与数据顺序会不一致。
-    """
-    if not self._user_sorted:
-      return
-    hdr = self._table.horizontalHeader()
-    section = hdr.sortIndicatorSection()
-    if 0 <= section < len(Config.TABLE_COLUMNS):
-      self._model.sort(section, hdr.sortIndicatorOrder())
+    """重新应用用户当前的表头排序（实现见 ui/table_state.py）"""
+    self._table_state.reapply_sort()
 
   def _toggle_cover_wall(self):
     """切换表格视图和封面墙视图"""
@@ -860,78 +851,38 @@ class MainWindow(QMainWindow):
         pass
     self._restore_header_state()
 
+  @property
+  def _user_sorted(self) -> bool:
+    """用户是否已应用表头排序（委托给 TableState）"""
+    return self._table_state.user_sorted
+
+  @_user_sorted.setter
+  def _user_sorted(self, value: bool):
+    self._table_state.user_sorted = value
+
   def _show_header_menu(self, pos):
-    """表头右键菜单：显隐列"""
-    hdr = self._table.horizontalHeader()
-    menu = QMenu(self)
-    for col in range(hdr.count()):
-      name = self._model.headerData(col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
-      action = menu.addAction(name)
-      action.setCheckable(True)
-      action.setChecked(not hdr.isSectionHidden(col))
-      action.setData(col)
-      action.triggered.connect(lambda _, c=col: self._toggle_column(c))
-    menu.exec(hdr.mapToGlobal(pos))
+    """表头右键菜单：显隐列（实现见 ui/table_state.py）"""
+    self._table_state.show_menu(pos)
 
   def _toggle_column(self, col):
     """切换列的显隐"""
-    hdr = self._table.horizontalHeader()
-    hdr.setSectionHidden(col, not hdr.isSectionHidden(col))
-    self._save_header_state()
+    self._table_state.toggle_column(col)
 
   def _save_header_state(self):
-    """将表头状态（列顺序、宽度、可见性）保存到 settings.ini（防抖 500ms）"""
-    if hasattr(self, '_header_save_timer'):
-      self._header_save_timer.stop()
-    self._header_save_timer = QTimer(self)
-    self._header_save_timer.setSingleShot(True)
-    self._header_save_timer.timeout.connect(self._do_save_header_state)
-    self._header_save_timer.start(500)
+    """将表头状态保存到 settings.ini（500ms 防抖）"""
+    self._table_state.save_soon()
 
   def _do_save_header_state(self):
     """实际执行表头状态保存"""
-    state = self._table.horizontalHeader().saveState().data()
-    s = self._settings()
-    s.setValue('headerState', base64.b64encode(state).decode('ascii'))
+    self._table_state.save_now()
 
   def _restore_header_state(self):
     """从 settings.ini 恢复表头状态（列宽/列顺序/可见性，不恢复排序）"""
-    hdr = self._table.horizontalHeader()
-    s = self._settings()
-    state_b64 = s.value('headerState', '')
-    if state_b64:
-      try:
-        hdr.restoreState(QByteArray(base64.b64decode(state_b64)))
-      except Exception:
-        pass
-      # 启动固定按 rowid DESC（最新在前）：restoreState 内部会触发一次
-      # 按存储指示器的排序，这里清除指示器并重新装载数据抵消掉
-      hdr.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
-      self._user_sorted = False
-      self._load_data()
-    # 排序信号在恢复完成后才连接——启动恢复过程不标记 _user_sorted；
-    # 之后用户点击表头才会标记并保存（保存经 500ms 防抖）
-    try:
-      hdr.sortIndicatorChanged.disconnect(self._on_sort_indicator_changed)
-    except TypeError:
-      pass
-    hdr.sortIndicatorChanged.connect(self._on_sort_indicator_changed)
-    # 断开旧的信号连接以防重复绑定
-    try:
-      hdr.sectionMoved.disconnect()
-    except TypeError:
-      pass
-    try:
-      hdr.sectionResized.disconnect()
-    except TypeError:
-      pass
-    hdr.sectionMoved.connect(self._save_header_state)
-    hdr.sectionResized.connect(self._save_header_state)
+    self._table_state.load(self._load_data)
 
   def _on_sort_indicator_changed(self, *_args):
-    """表头排序变化（用户点击或启动恢复）：标记已排序并保存状态"""
-    self._user_sorted = True
-    self._save_header_state()
+    """表头排序变化：标记已排序并保存状态"""
+    self._table_state._on_sort_indicator_changed(*_args)
 
   def _update_status(self):
     """更新状态栏：显示记录总数、Web状态和版本"""
