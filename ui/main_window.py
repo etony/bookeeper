@@ -187,9 +187,11 @@ class MainWindow(QMainWindow):
     # 表头状态（列宽/顺序/可见性/排序）交给 TableState 管理
     from ui.table_state import TableState
     self._table_state = TableState(self._table, self._model, self._settings, self)
-    # 列宽模式：默认拉伸填满，前三列自动调整内容宽度
+    # 列宽模式：默认拉伸填满，ISBN 列需完整显示 13 位 → 内容自适应，
+    # 书名/作者/出版列也按内容调整
     hdr = self._table.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
     hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
     hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
     hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
