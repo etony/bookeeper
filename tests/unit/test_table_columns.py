@@ -64,3 +64,15 @@ class TestIsbnColumnWidth:
     hdr = window._table.horizontalHeader()
     assert hdr.sectionSize(0) >= hdr.sectionSizeHint(0), \
       'ISBN 列宽度必须 >= 内容提示宽度，否则会截断显示'
+
+
+class TestTitleColumnWidth:
+  def test_title_column_is_interactive_at_30_chars(self, window):
+    """书名列固定为 30 个字符宽，超出部分截断显示（可手动调宽）"""
+    from PyQt6.QtWidgets import QHeaderView
+    from ui.table_state import title_column_width
+    hdr = window._table.horizontalHeader()
+    assert hdr.sectionResizeMode(1) == QHeaderView.ResizeMode.Interactive, \
+      '书名列应是 Interactive（初始 30 字符宽，允许用户拖宽）'
+    assert hdr.sectionSize(1) == title_column_width(hdr), \
+      '书名列宽度必须 = 30 个字符宽'

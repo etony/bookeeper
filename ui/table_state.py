@@ -19,6 +19,17 @@ import base64
 from PyQt6.QtCore import QByteArray, QObject, Qt, QTimer
 from PyQt6.QtWidgets import QHeaderView, QMenu
 
+# 书名 / 作者列固定 30 字符宽（超出截断显示省略号）。用像素而非字符数：
+# 列宽以像素为单位，字符数需按表头字体换算。
+_TITLE_COLUMN_CHARS = 30
+
+
+def title_column_width(header) -> int:
+  """按表头字体把 30 个字符换算成像素宽度"""
+  font = header.font()
+  fm = header.fontMetrics()
+  return fm.horizontalAdvance('中' * _TITLE_COLUMN_CHARS)
+
 
 class TableState(QObject):
   """QTableView 表头状态的持久化与排序重应用
@@ -30,12 +41,15 @@ class TableState(QObject):
   """
 
   def __init__(self, table, model, settings_factory, parent=None,
-               resize_to_contents_sections=()):
+               resize_to_contents_sections=(),
+               fixed_width_sections=()):
     super().__init__(parent)
     self._table = table
     self._model = model
     self._settings = settings_factory
     self._resize_to_contents_sections = frozenset(resize_to_contents_sections)
+    # section → 返回像素宽度的可调用对象（恢复表头状态后强制重设，防旧状态覆盖）
+    self._fixed_width_sections = dict(fixed_width_sections)
     self._user_sorted = False
     self._save_timer = None
 
@@ -99,6 +113,10 @@ class TableState(QObject):
       # 盖成旧 Interactive + 窄宽度（长内容如 13 位 ISBN 被截断）。强制重设回来。
       for section in self._resize_to_contents_sections:
         hdr.setSectionResizeMode(section, QHeaderView.ResizeMode.ResizeToContents)
+      # 固定宽列（书名等）同理：恢复后强制按指定宽度重设，防旧状态覆盖
+      for section, width_fn in self._fixed_width_sections.items():
+        hdr.setSectionResizeMode(section, QHeaderView.ResizeMode.Interactive)
+        hdr.resizeSection(section, width_fn(hdr))
       hdr.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
       self._user_sorted = False
       if reload_callback:

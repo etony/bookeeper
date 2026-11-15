@@ -185,16 +185,20 @@ class MainWindow(QMainWindow):
     self._model = BookTableModel(df)
     self._table.setModel(self._model)
     # 表头状态（列宽/顺序/可见性/排序）交给 TableState 管理
-    from ui.table_state import TableState
-    # 列 0（ISBN）必须始终 ResizeToContents，防存量 headerState 恢复成窄宽截断
-    self._table_state = TableState(self._table, self._model, self._settings, self,
-                                   resize_to_contents_sections=(0,))
-    # 列宽模式：默认拉伸填满，ISBN 列需完整显示 13 位 → 内容自适应，
-    # 书名/作者/出版列也按内容调整
+    from ui.table_state import TableState, title_column_width
     hdr = self._table.horizontalHeader()
+    # 列 0（ISBN）必须始终 ResizeToContents，列 1（书名）固定 30 字符宽；
+    # 防存量 headerState 恢复时把这两列的模式/宽度覆盖掉
+    self._table_state = TableState(
+      self._table, self._model, self._settings, self,
+      resize_to_contents_sections=(0,),
+      fixed_width_sections={1: title_column_width})
+    # 列宽模式：默认拉伸填满，ISBN 列需完整显示 13 位 → 内容自适应，
+    # 书名列固定 30 字符宽（超出截断省略号，可手动拖宽）
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+    hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+    hdr.resizeSection(1, title_column_width(hdr))
     hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
     hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
     self._load_data()
