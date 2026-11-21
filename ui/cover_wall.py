@@ -293,14 +293,7 @@ class CoverWallWidget(QWidget):
         toolbar.setContentsMargins(8, 4, 8, 4)
         toolbar.setSpacing(8)
 
-        toolbar.addWidget(QLabel('排序:'))
-        self._sort_combo = QComboBox()
-        self._sort_combo.addItems(['书名', '评分', '添加时间', '购书日期'])
-        self._sort_combo.setFixedHeight(34)
-        self._sort_combo.setAccessibleName('排序方式')
-        self._sort_combo.currentTextChanged.connect(self._on_sort_changed)
-        toolbar.addWidget(self._sort_combo)
-
+        # 封面墙不再独立排序——排列顺序跟随表格视图当前顺序
         toolbar.addWidget(QLabel('每行:'))
         self._columns_combo = QComboBox()
         self._columns_combo.addItems(['自动', '3', '4', '5', '6', '7', '8'])
@@ -365,8 +358,9 @@ class CoverWallWidget(QWidget):
             self._count_label.setText('共 0 本')
             return
 
-        # 排序
-        sorted_books = self._sort_books(self._books)
+        # 排序已交由表格视图统一处理：set_books 传入的 books 即表格的
+        # 当前显示顺序，直接按序铺卡片，不做独立排序
+        sorted_books = self._books
 
         # 创建新卡片
         for i, book in enumerate(sorted_books):
@@ -386,29 +380,6 @@ class CoverWallWidget(QWidget):
         # 添加弹性空间
         for col in range(self._columns):
             self._grid_layout.setColumnStretch(col, 1)
-
-    def _sort_books(self, books: List[Book]) -> List[Book]:
-        """根据当前排序选项排序图书"""
-        sort_key = self._sort_combo.currentText()
-
-        def get_sort_value(book: Book):
-            if sort_key == '书名':
-                return book.title.lower()
-            elif sort_key == '评分':
-                try:
-                    return -float(book.rating)
-                except (ValueError, TypeError):
-                    return 0
-            elif sort_key == '购书日期':
-                return book.start_date or '9999'
-            else:  # 添加时间
-                return book.isbn  # ISBN 作为添加顺序的近似
-
-        return sorted(books, key=get_sort_value)
-
-    def _on_sort_changed(self, text: str):
-        """排序选项改变"""
-        self._refresh_grid()
 
     def _on_columns_changed(self, text: str):
         """每行数量改变"""

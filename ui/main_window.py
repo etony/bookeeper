@@ -156,6 +156,8 @@ class MainWindow(QMainWindow):
 
     # 当前视图模式：True=封面墙，False=表格
     self._is_cover_wall_mode = False
+    # 当前表格中的图书（用于封面墙按表格顺序重新铺卡片）
+    self._current_books = []
 
     layout.addWidget(self._content_stack, stretch=1)
 
@@ -223,11 +225,26 @@ class MainWindow(QMainWindow):
     rows = [b.to_row() for b in books]
     cols = Config.TABLE_COLUMNS
     df = pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame({c: [] for c in cols}, dtype=object)
+    self._current_books = books
     self._model.load_dataframe(df)
     self._table_state.reapply_sort()
-    # 同时更新封面墙数据
+    # 同时更新封面墙数据：按表格当前显示顺序（排序后）铺卡片
     if hasattr(self, '_cover_wall'):
-      self._cover_wall.set_books(books)
+      self._cover_wall.set_books(self._books_in_table_order(books))
+
+  def _books_in_table_order(self, books):
+    """
+    按表格模型当前显示顺序重排 books。
+
+    表格的显示顺序由模型 DataFrame 决定（默认 rowid DESC，用户排序后
+    再按表头排序）。封面墙要与表格一致，所以取模型里 ISBN 列的顺序，
+    把 books 映射成同序列表。
+    """
+    if not books:
+      return books
+    order = {str(isbn): i for i, isbn in enumerate(self._model._data['ISBN'])}
+    # 不在当前表格（理论上不会发生）的书放到末尾，保持稳定
+    return sorted(books, key=lambda b: order.get(str(b.isbn), len(order)))
 
   def _reapply_user_sort(self):
     """重新应用用户当前的表头排序（实现见 ui/table_state.py）"""
@@ -237,6 +254,8 @@ class MainWindow(QMainWindow):
     """切换表格视图和封面墙视图"""
     self._is_cover_wall_mode = not self._is_cover_wall_mode
     if self._is_cover_wall_mode:
+      # 切换前按表格当前顺序重铺卡片（用户可能在加载后才点了表头排序）
+      self._cover_wall.set_books(self._books_in_table_order(self._current_books))
       self._table.hide()
       self._cover_wall.show()
     else:
@@ -824,7 +843,7 @@ class MainWindow(QMainWindow):
     self._toolbar.set_dark_mode(self._dark_mode)
     # 刷新封面墙卡片样式（卡片颜色硬编码在创建时，需重建）
     if self._is_cover_wall_mode:
-      self._cover_wall.set_books(self._repo.get_all())
+      self._cover_wall.set_books(self._books_in_table_order(self._current_books))
     s = self._settings()
     s.setValue('darkMode', self._dark_mode)
     self._update_status()  # 刷新状态栏中的主题名称
