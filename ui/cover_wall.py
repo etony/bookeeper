@@ -360,10 +360,8 @@ class CoverWallWidget(QWidget):
 
         # 排序已交由表格视图统一处理：set_books 传入的 books 即表格的
         # 当前显示顺序，直接按序铺卡片，不做独立排序
-        sorted_books = self._books
-
         # 创建新卡片
-        for i, book in enumerate(sorted_books):
+        for i, book in enumerate(self._books):
             card = CoverCard(book)
             card.clicked.connect(self._on_card_clicked)
             card.double_clicked.connect(self._on_card_double_clicked)
